@@ -1,0 +1,66 @@
+import {backupDatabase} from './backup-db.mjs';
+import {test} from 'node:test';import assert from 'node:assert/strict';import {mkdtempSync,rmSync} from 'node:fs';import {tmpdir} from 'node:os';import {join} from 'node:path';import {randomBytes} from 'node:crypto';import {createApp} from './server.mjs';
+const initial=()=>({costs:[],activity:[],notes:[],masters:[{name:'B2C 출고비',unit:'BOX',active:true}],stores:[{id:'s1',name:'서울점',code:'SHOP001',groupId:'g1',active:true}],groups:[{id:'g1',name:'직영그룹'}],countries:[{code:'KR',name:'대한민국'}],centerMasters:[{name:'인천',countryCode:'KR'}]});
+const row=(id,amount=50000)=>({id,domain:'center',recordType:'cost',month:'2026-10',center:'인천',countryCode:'KR',account:'B2C',category:'B2C 출고비',unit:'BOX',quantity:100,price:amount/100,amount,storeId:'s1',groupId:'g1',memo:''});
+async function start(dbPath=':memory:'){const app=createApp({dbPath,secureCookies:false});await new Promise(r=>app.server.listen(0,'127.0.0.1',r));return {...app,url:`http://127.0.0.1:${app.server.address().port}`};}
+function client(url){let cookie='',csrf='';return async(path,{method='GET',body,origin=url,token=true}={})=>{const headers={Origin:origin,...(cookie?{Cookie:cookie}:{}),...(body?{'Content-Type':'application/json'}:{}),...(token&&csrf?{'X-CSRF-Token':csrf}:{})};const res=await fetch(url+path,{method,headers,body:body?JSON.stringify(body):undefined});if(res.headers.get('set-cookie'))cookie=res.headers.get('set-cookie').split(';')[0];const data=await res.json();if(data.csrf)csrf=data.csrf;return {status:res.status,data};};}
+const password=()=>randomBytes(18).toString('hex');
+test('auth, permissions, validation, conflicts, audit, backup and atomic restore',async()=>{
+ const app=await start(),admin=client(app.url),pass=password();try{
+  assert.equal((await admin('/api/state')).status,401);assert.equal((await admin('/data/logistics.sqlite')).status,404);
+  assert.equal((await admin('/api/setup',{method:'POST',body:{username:'admin',password:pass},origin:'https://evil.example'})).status,403);
+  assert.equal((await admin('/api/setup',{method:'POST',body:{username:'admin',password:pass}})).status,201);
+  assert.equal((await admin('/api/login',{method:'POST',body:{username:'admin',password:'invalid'}})).status,401);
+  assert.equal((await admin('/api/login',{method:'POST',body:{username:'admin',password:pass}})).status,200);
+  assert.notEqual(app.db.prepare('SELECT password_hash FROM users').get().password_hash,pass);
+  const doc=initial();assert.equal((await admin('/api/state',{method:'PUT',body:{revision:0,state:doc},token:false})).status,403);
+  assert.equal((await admin('/api/state',{method:'PUT',body:{revision:0,state:doc}})).status,200);
+  for(const role of ['editor','viewer'])assert.equal((await admin('/api/users',{method:'POST',body:{username:role,password:pass,role}})).status,201);
+  const viewer=client(app.url),editor=client(app.url);await viewer('/api/login',{method:'POST',body:{username:'viewer',password:pass}});await editor('/api/login',{method:'POST',body:{username:'editor',password:pass}});
+  assert.equal((await viewer('/api/state')).status,200);assert.equal((await viewer('/api/state',{method:'PUT',body:{revision:1,state:doc}})).status,403);assert.equal((await viewer('/api/backup')).status,403);
+  assert.equal((await editor('/api/state',{method:'PUT',body:{revision:1,state:{...doc,groups:[...doc.groups,{id:'g2',name:'forbidden'}]}}})).status,403);
+  doc.costs=[row('r1')];assert.equal((await editor('/api/state',{method:'PUT',body:{revision:1,state:doc}})).status,200);
+  assert.equal((await admin('/api/state',{method:'PUT',body:{revision:1,state:doc}})).status,409);
+  const tampered={...doc,costs:[{...row('r1'),amount:999}]};assert.equal((await editor('/api/state',{method:'PUT',body:{revision:2,state:tampered}})).status,400);
+  const count={...row('r1'),recordType:'count',quantity:100,amount:500};assert.equal((await editor('/api/state',{method:'PUT',body:{revision:2,state:{...doc,costs:[count]}}})).status,400);
+  const backup=(await admin('/api/backup')).data;assert.ok(!JSON.stringify(backup).includes('password_hash'));assert.equal(backup.state.costs[0].amount,50000);
+  doc.costs=[row('r1',60000)];assert.equal((await editor('/api/state',{method:'PUT',body:{revision:2,state:doc}})).status,200);
+  const audit=(await admin('/api/audit')).data.records;assert.ok(audit.some(a=>a.details.changes?.some(c=>c.operation==='수정'&&c.before.amount===50000&&c.after.amount===60000)));
+  assert.equal((await admin('/api/restore',{method:'POST',body:{revision:3,backup,currentPassword:'wrong'}})).status,403);
+  assert.equal((await admin('/api/restore',{method:'POST',body:{revision:3,backup:{...backup,state:{...doc,costs:[{...row('r1'),amount:-1}]}},currentPassword:pass}})).status,400);
+  assert.equal((await admin('/api/state')).data.revision,3);
+  assert.equal((await admin('/api/restore',{method:'POST',body:{revision:3,backup,currentPassword:pass}})).status,200);assert.equal((await admin('/api/state')).data.state.costs[0].amount,50000);
+  assert.ok((await admin('/api/snapshots')).data.snapshots.length>=3);
+  const users=(await admin('/api/users')).data.users,ed=users.find(u=>u.username==='editor');await admin('/api/users/'+ed.id,{method:'PATCH',body:{role:'editor',active:false}});assert.equal((await editor('/api/state')).status,401);
+  await viewer('/api/logout',{method:'POST',body:{}});assert.equal((await viewer('/api/state')).status,401);
+ }finally{await app.close();}
+});
+test('SQLite data and audit survive full server restart',async()=>{const dir=mkdtempSync(join(tmpdir(),'logistics-db-test-')),dbPath=join(dir,'db.sqlite'),pass=password();let app=await start(dbPath);try{let c=client(app.url);await c('/api/setup',{method:'POST',body:{username:'restart',password:pass}});await c('/api/login',{method:'POST',body:{username:'restart',password:pass}});const state=initial();state.costs=[row('persist')];assert.equal((await c('/api/state',{method:'PUT',body:{revision:0,state}})).status,200);await backupDatabase(dbPath,join(dir,'full-backup.sqlite'));await assert.rejects(()=>backupDatabase(dbPath,join(dir,'full-backup.sqlite')));await app.close();app=await start(join(dir,'full-backup.sqlite'));c=client(app.url);await c('/api/login',{method:'POST',body:{username:'restart',password:pass}});assert.equal((await c('/api/state')).data.state.costs[0].id,'persist');assert.ok((await c('/api/audit')).data.records.some(r=>r.action==='save'));}finally{await app.close();rmSync(dir,{recursive:true,force:true});}});
+
+test('trade metadata is persisted and invalid cargo cannot bypass server validation',async()=>{
+ const app=await start(),c=client(app.url),pass=password();try{
+  await c('/api/setup',{method:'POST',body:{username:'tradeadmin',password:pass}});await c('/api/login',{method:'POST',body:{username:'tradeadmin',password:pass}});
+  const state=initial();state.costs=[{...row('trade-1'),domain:'trade',center:'',shipment:'EXP-1',direction:'수출',origin:'KR',destination:'KR',incoterm:'CIP',cargoType:'AIR',ciplNo:'000012-CIPL',internalNo:'SCM-000034',chargeGroup:'국제운송료',namedPlace:'Hanoi Warehouse'}];
+  assert.equal((await c('/api/state',{method:'PUT',body:{revision:0,state}})).status,200);assert.equal((await c('/api/state')).data.state.costs[0].incoterm,'CIP');
+  const backup=(await c('/api/backup')).data;assert.equal(backup.state.costs[0].cargoType,'AIR');assert.equal(backup.state.costs[0].ciplNo,'000012-CIPL');assert.equal(backup.state.costs[0].internalNo,'SCM-000034');assert.equal(backup.state.costs[0].chargeGroup,'국제운송료');assert.equal(backup.state.costs[0].namedPlace,'Hanoi Warehouse');state.costs[0].cargoType='INVALID';assert.equal((await c('/api/state',{method:'PUT',body:{revision:1,state}})).status,400);assert.equal((await c('/api/state')).data.state.costs[0].cargoType,'AIR');
+ }finally{await app.close();}
+});
+
+test('server verifies converted KRW and preserves FX evidence through backups',async()=>{const app=await start(),c=client(app.url),pass=password();try{await c('/api/setup',{method:'POST',body:{username:'fxadmin',password:pass}});await c('/api/login',{method:'POST',body:{username:'fxadmin',password:pass}});const state=initial();state.costs=[{...row('fx-1'),domain:'trade',center:'',shipment:'EXP-1',direction:'수출',origin:'KR',destination:'KR',currency:'USD',foreignAmount:'100',exchangeRate:'1350',rateBasis:1,rateDate:'2026-10-01',quantity:null,price:null,unit:'원',amount:135000}];assert.equal((await c('/api/state',{method:'PUT',body:{revision:0,state}})).status,200);const backup=(await c('/api/backup')).data;assert.equal(backup.state.costs[0].foreignAmount,'100');assert.equal(backup.state.costs[0].amount,135000);state.costs[0].exchangeRate='1400';assert.equal((await c('/api/state',{method:'PUT',body:{revision:1,state}})).status,400);assert.equal((await c('/api/state')).data.state.costs[0].exchangeRate,'1350');}finally{await app.close();}});
+
+test('monthly targets validate, persist in backups and are admin-only',async()=>{const app=await start(),c=client(app.url),pass=password();try{
+ await c('/api/setup',{method:'POST',body:{username:'targetadmin',password:pass}});await c('/api/login',{method:'POST',body:{username:'targetadmin',password:pass}});
+ const state=initial(),scope={domain:'all',account:'all',country:'all',center:'all',category:'all',group:'all',store:'all'};state.targets=[{month:'2026-10',amount:100000,scope}];
+ assert.equal((await c('/api/state',{method:'PUT',body:{revision:0,state}})).status,200);assert.equal((await c('/api/backup')).data.state.targets[0].amount,100000);
+ await c('/api/users',{method:'POST',body:{username:'targeteditor',password:pass,role:'editor'}});const ed=client(app.url);await ed('/api/login',{method:'POST',body:{username:'targeteditor',password:pass}});
+ state.targets[0].amount=200000;assert.equal((await ed('/api/state',{method:'PUT',body:{revision:1,state}})).status,403);
+ state.targets.push({...state.targets[0]});assert.equal((await c('/api/state',{method:'PUT',body:{revision:1,state}})).status,400);assert.equal((await c('/api/state')).data.state.targets[0].amount,100000);
+ }finally{await app.close();}});
+
+test('category parents persist without rewriting costs and invalid parent metadata is rejected',async()=>{const app=await start(),c=client(app.url),pass=password();try{
+ await c('/api/setup',{method:'POST',body:{username:'categoryadmin',password:pass}});await c('/api/login',{method:'POST',body:{username:'categoryadmin',password:pass}});
+ const state=initial();state.costs=[row('classified')];assert.equal((await c('/api/state',{method:'PUT',body:{revision:0,state}})).status,200);
+ state.masters[0].parentCategory='물류센터 비용';assert.equal((await c('/api/state',{method:'PUT',body:{revision:1,state}})).status,200);
+ const backup=(await c('/api/backup')).data;assert.equal(backup.state.masters[0].parentCategory,'물류센터 비용');assert.deepEqual(backup.state.costs,state.costs);
+ state.masters[0].parentCategory=' ';assert.equal((await c('/api/state',{method:'PUT',body:{revision:2,state}})).status,400);assert.equal((await c('/api/state')).data.state.masters[0].parentCategory,'물류센터 비용');
+ }finally{await app.close();}});

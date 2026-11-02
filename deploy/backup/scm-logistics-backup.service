@@ -1,0 +1,12 @@
+[Unit]
+Description=SCM logistics verified local database backup
+Requires=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+User=root
+UMask=0077
+WorkingDirectory=/opt/scm-logistics
+ExecStart=/usr/bin/python3 /opt/scm-logistics/deploy/backup/run-local.py --app-root /opt/scm-logistics --backup-dir /var/backups/scm-logistics --keep-days 30
+TimeoutStartSec=15min

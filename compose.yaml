@@ -1,0 +1,16 @@
+services:
+  logistics:
+    build: .
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3000:3000"
+    environment:
+      HOST: 0.0.0.0
+      PORT: 3000
+      LOGISTICS_DB_PATH: /app/data/logistics.sqlite
+      NODE_ENV: ${NODE_ENV:-development}
+    volumes:
+      - logistics_data:/app/data
+    init: true
+volumes:
+  logistics_data:

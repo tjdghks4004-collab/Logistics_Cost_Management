@@ -1,0 +1,11 @@
+[Unit]
+Description=Daily SCM logistics backup at 02:30 Asia/Seoul
+
+[Timer]
+OnCalendar=*-*-* 02:30:00 Asia/Seoul
+Persistent=true
+RandomizedDelaySec=5m
+Unit=scm-logistics-backup.service
+
+[Install]
+WantedBy=timers.target

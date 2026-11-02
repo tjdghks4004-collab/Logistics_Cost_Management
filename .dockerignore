@@ -1,0 +1,9 @@
+.git
+node_modules
+data
+*.sqlite*
+.env*
+*.test.mjs
+tests.mjs
+backups
+artifacts
