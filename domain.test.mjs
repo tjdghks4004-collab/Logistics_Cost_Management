@@ -54,7 +54,7 @@ test('E/F/C/D guidance responds to seller/buyer perspective and insurance obliga
  assert.equal(tradeGuidance({incoterm:'FCA',cargoType:'AIR'}).freightLabel,'항공 운송료');
 });
 test('trade cost groups roundtrip and are optional in prior 23-column Excel',async()=>{
- const raw={...base,domain:'trade',shipment:'EXP-1',direction:'수출',origin:'KR',destination:'VN',countryCode:'VN',chargeGroup:'국제운송료',namedPlace:' Hanoi Warehouse '};
+ const raw={...base,domain:'trade',shipment:'EXP-1',direction:'수출',origin:'KR',destination:'VN',countryCode:'VN',category:'포워딩',chargeGroup:'국제운송료',namedPlace:' Hanoi Warehouse '};
  assert.equal(validateRecord(raw,ctx).namedPlace,'Hanoi Warehouse');assert.equal(validateRecord(raw,ctx).amount,50000);assert.throws(()=>validateRecord({...raw,chargeGroup:'알수없음'},ctx));
  const values=['2026-10','수출입','비용','KR','','EXP-3','수출','KR','VN','공통','S001','서울점','','포워딩','일괄',1,2000,'','','CIP','AIR','CIPL-1','REF-1','국제운송료','Hanoi Warehouse'];
  const wb=await buildUnifiedTemplate(ExcelJS,ctx);wb.getWorksheet('통합 입력').getRow(2).values=values;const loaded=new ExcelJS.Workbook();await loaded.xlsx.load(await wb.xlsx.writeBuffer());const result=validateUnified(workbookLines(loaded),ctx);assert.deepEqual(result.errors,[]);assert.equal(result.entries[0].chargeGroup,'국제운송료');assert.equal(result.entries[0].namedPlace,'Hanoi Warehouse');
@@ -165,4 +165,13 @@ test('maximum cost import validates 2000 decimal lines exactly and rejects 2001 
  const lines=[unifiedHeaders,...Array.from({length:2000},(_,i)=>row(i))],result=validateUnified(lines,ctx);
  assert.deepEqual(result.errors,[]);assert.equal(result.entries.length,2000);assert.equal(sum(result.entries),202000);
  const over=validateUnified([...lines,row(2000)],ctx);assert.equal(over.entries.length,0);assert.match(over.errors[0],/2,000/);
+});
+
+import {categoryChargeGroups} from './domain.mjs';
+test('category-specific charge groups restrict new records and imports but preserve unchanged historical choices',()=>{
+ const c=structuredClone(ctx);c.masters.push({name:'임가공비(세트포장 등)',active:true,parentCategory:'임가공비',allowedChargeGroups:['출발지 비용','도착지 비용']});
+ assert.deepEqual(categoryChargeGroups('임가공비(세트포장 등)',c.masters),['출발지 비용','도착지 비용']);
+ const raw={...base,domain:'trade',center:'',countryCode:'KR',shipment:'DOC-1',direction:'수출',origin:'KR',destination:'VN',category:'임가공비(세트포장 등)',chargeGroup:'국제운송료'};
+ assert.throws(()=>validateRecord(raw,c),/비용 그룹/);assert.doesNotThrow(()=>validateRecord({...raw,chargeGroup:'출발지 비용'},c));
+ assert.doesNotThrow(()=>validateRecord(raw,c,{previous:raw}));c.masters.at(-1).allowedChargeGroups=[];assert.doesNotThrow(()=>validateRecord({...raw,chargeGroup:''},c));
 });

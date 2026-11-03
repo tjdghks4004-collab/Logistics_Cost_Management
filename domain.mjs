@@ -38,6 +38,7 @@ export function validateRecord(raw,ctx,{previous=null}={}){
   if(!r.shipment?.trim()||!['수출','수입'].includes(r.direction))fail('수출입관리번호와 수출/수입 구분이 필요합니다.');
   if(![r.origin,r.destination].every(code=>ctx.countries.some(c=>c.code===code)))fail('출발국과 도착국을 기준정보에 등록하세요.');
  }else {r.shipment='';r.direction='';r.origin='';r.destination='';r.incoterm='';r.cargoType='';r.ciplNo='';r.internalNo='';r.chargeGroup='';r.namedPlace='';r.containerType='';}
+ if(r.domain==='trade'&&r.chargeGroup&&!categoryChargeGroups(r.category,ctx.masters).includes(r.chargeGroup)&&!(previous?.category===r.category&&previous?.chargeGroup===r.chargeGroup))fail('선택한 비용 항목에서 사용할 수 없는 비용 그룹입니다. 기준정보 또는 그룹을 확인하세요.');
  if(r.recordType==='count'&&r.domain!=='center')fail('출고 건수는 물류센터에서 입력하세요.');
  if(r.storeId){const s=ctx.stores.find(s=>s.id===r.storeId&&(s.active||sameStore));if(!s)fail('등록된 사용 중 매장을 선택하세요.');r.groupId=sameStore?previous.groupId:s.groupId;}
  else {r.storeId='';r.groupId=r.groupId||'';if(r.groupId&&!ctx.groups.some(g=>g.id===r.groupId))fail('관리그룹을 확인하세요.');}
@@ -68,7 +69,7 @@ export function validateRecord(raw,ctx,{previous=null}={}){
  r.memo=String(r.memo||'').trim();if(r.memo.length>500)fail('메모는 500자 이하입니다.');
  delete r.mode;delete r.autoRecommended;delete r.manualEntry;return r;
 }
-export function fingerprint(r){return JSON.stringify(['month','domain','recordType','countryCode','center','shipment','direction','origin','destination','account','storeId','groupId','category','unit','quantity','price','amount','memo','incoterm','cargoType','ciplNo','internalNo','chargeGroup','namedPlace','currency','foreignAmount','exchangeRate','rateBasis','rateDate','containerType'].map(k=>k==='currency'?(r[k]||'KRW'):k==='rateBasis'?(r[k]||1):r[k]??''));}
+export function fingerprint(r){return JSON.stringify(['month','domain','recordType','countryCode','center','shipment','direction','origin','destination','account','storeId','groupId','category','unit','quantity','price','amount','memo','incoterm','cargoType','ciplNo','internalNo','chargeGroup','namedPlace','currency','foreignAmount','exchangeRate','rateBasis','rateDate','containerType','material'].map(k=>k==='currency'?(r[k]||'KRW'):k==='rateBasis'?(r[k]||1):r[k]??''));}
 export function validateUnified(lines,ctx){
  if(lines.length>2001)return {entries:[],errors:['한 번에 2,000행 이하로 업로드하세요.']};
  if(!Array.isArray(lines[0]))return {entries:[],errors:['입력된 자료가 없습니다. 양식에 자료를 작성하세요.']};
@@ -163,7 +164,7 @@ export function costReviewItems(row){
 }
 export function filterCostRecords(rows,{query='',check='all'}={},displayText=()=>[]){
  const q=query.trim().toLocaleLowerCase();
- return rows.filter(row=>(check==='all'||costReviewItems(row).some(item=>item.key===check))&&(!q||[row.month,row.center,row.countryCode,row.account,row.category,row.chargeGroup,row.shipment,row.ciplNo,row.internalNo,row.incoterm,row.cargoType,row.containerType,row.currency,row.memo,...displayText(row)].some(value=>String(value??'').toLocaleLowerCase().includes(q))));
+ return rows.filter(row=>(check==='all'||costReviewItems(row).some(item=>item.key===check))&&(!q||[row.month,row.center,row.countryCode,row.account,row.category,row.chargeGroup,row.shipment,row.ciplNo,row.internalNo,row.incoterm,row.cargoType,row.containerType,row.currency,row.memo,row.material?.code,row.material?.name,row.material?.specification,row.material?.supplier,...displayText(row)].some(value=>String(value??'').toLocaleLowerCase().includes(q))));
 }
 
 // A category remains the stable import/record key; its parent is master metadata.
@@ -185,3 +186,12 @@ export function assertNoNewCostDuplicates(costs,previous=[]){
  const old=new Map(),seen=new Map();for(const r of previous){const key=fingerprint(r);old.set(key,(old.get(key)||0)+1);}
  for(let i=0;i<costs.length;i++){const key=fingerprint(costs[i]),count=(seen.get(key)||0)+1;seen.set(key,count);if(count>Math.max(1,old.get(key)||0))throw Error(`${i+1}번째 비용·건수 내역이 중복됩니다. 실제 다른 청구라면 문서번호 또는 메모로 구분하세요.`);}
 }
+
+export function categoryChargeGroups(category,masters){
+ const master=masters.find(m=>m.name===category);if(Array.isArray(master?.allowedChargeGroups))return master.allowedChargeGroups;
+ const parent=categoryParentOf(category,masters);if(parent==='포워딩')return [...chargeGroups];
+ if(parent==='관세')return ['출발지 비용','도착지 비용'];
+ if(parent==='임가공비')return ['출발지 비용','도착지 비용','기타·일괄 청구'];
+ return ['기타·일괄 청구'];
+}
+export function validChargeGroupMapping(value){return Array.isArray(value)&&new Set(value).size===value.length&&value.every(v=>chargeGroups.includes(v));}

@@ -1,6 +1,6 @@
 import {backupDatabase} from './backup-db.mjs';
 import {test} from 'node:test';import assert from 'node:assert/strict';import {mkdtempSync,rmSync} from 'node:fs';import {tmpdir} from 'node:os';import {join} from 'node:path';import {randomBytes} from 'node:crypto';import {createApp} from './server.mjs';
-const initial=()=>({costs:[],activity:[],notes:[],masters:[{name:'B2C 출고비',unit:'BOX',active:true}],stores:[{id:'s1',name:'서울점',code:'SHOP001',groupId:'g1',active:true}],groups:[{id:'g1',name:'직영그룹'}],countries:[{code:'KR',name:'대한민국'}],centerMasters:[{name:'인천',countryCode:'KR'}]});
+const initial=()=>({costs:[],activity:[],notes:[],masters:[{name:'B2C 출고비',unit:'BOX',active:true,allowedChargeGroups:['국제운송료','출발지 비용','도착지 비용','적하보험료','기타·일괄 청구']}],stores:[{id:'s1',name:'서울점',code:'SHOP001',groupId:'g1',active:true}],groups:[{id:'g1',name:'직영그룹'}],countries:[{code:'KR',name:'대한민국'}],centerMasters:[{name:'인천',countryCode:'KR'}]});
 const row=(id,amount=50000)=>({id,domain:'center',recordType:'cost',month:'2026-10',center:'인천',countryCode:'KR',account:'B2C',category:'B2C 출고비',unit:'BOX',quantity:100,price:amount/100,amount,storeId:'s1',groupId:'g1',memo:''});
 async function start(dbPath=':memory:'){const app=createApp({dbPath,secureCookies:false});await new Promise(r=>app.server.listen(0,'127.0.0.1',r));return {...app,url:`http://127.0.0.1:${app.server.address().port}`};}
 function client(url){let cookie='',csrf='';return async(path,{method='GET',body,origin=url,token=true}={})=>{const headers={Origin:origin,...(cookie?{Cookie:cookie}:{}),...(body?{'Content-Type':'application/json'}:{}),...(token&&csrf?{'X-CSRF-Token':csrf}:{})};const res=await fetch(url+path,{method,headers,body:body?JSON.stringify(body):undefined});if(res.headers.get('set-cookie'))cookie=res.headers.get('set-cookie').split(';')[0];const data=await res.json();if(data.csrf)csrf=data.csrf;return {status:res.status,data};};}
@@ -96,5 +96,19 @@ test('production refuses browser setup even through a localhost HTTPS reverse pr
  const app=createApp({dbPath:':memory:',secureCookies:true});await new Promise(r=>app.server.listen(0,'127.0.0.1',r));try{
   const port=app.server.address().port,res=await fetch(`http://127.0.0.1:${port}/api/setup`,{method:'POST',headers:{Origin:`https://127.0.0.1:${port}`,'Content-Type':'application/json'},body:JSON.stringify({username:'publicadmin',password:password()})});
   assert.equal(res.status,403);assert.match((await res.json()).error,/admin:init/);assert.equal(app.db.prepare('SELECT COUNT(*) AS n FROM users').get().n,0);
+ }finally{await app.close();}
+});
+
+test('material masters are admin-only and purchase snapshots persist with supply cost once, tamper rejection and restore',async()=>{
+ const {buildMaterialPurchase}=await import('./materials.mjs');const app=await start(),admin=client(app.url),pass=password();try{
+  await admin('/api/setup',{method:'POST',body:{username:'materialadmin',password:pass}});await admin('/api/login',{method:'POST',body:{username:'materialadmin',password:pass}});
+  const state=initial();state.masters.push({name:'부자재 구매비',unit:'일괄',active:true});state.materials=[{id:'m1',code:'BOX-S',kind:'택배박스',name:'택배박스 S',specification:'210×160×120',flute:'B골',unit:'EA',active:true}];state.materialPrices=[{id:'p1',materialId:'m1',supplier:'공급사',center:'인천',unit:'EA',moq:100,unitPrice:'110',effectiveFrom:'2026-01-01',vatIncluded:true,vatRate:10,active:true}];
+  assert.equal((await admin('/api/state',{method:'PUT',body:{revision:0,state}})).status,200);await admin('/api/users',{method:'POST',body:{username:'materialeditor',password:pass,role:'editor'}});const editor=client(app.url);await editor('/api/login',{method:'POST',body:{username:'materialeditor',password:pass}});
+  state.costs=[buildMaterialPurchase({purchaseDate:'2026-10-01',materialId:'m1',priceId:'p1',quantity:'100',unitPrice:'110',center:'인천',memo:'청구 1'},state)];assert.equal((await editor('/api/state',{method:'PUT',body:{revision:1,state}})).status,200);
+  let backup=(await admin('/api/backup')).data;assert.equal(backup.state.costs[0].amount,10000);assert.equal(backup.state.costs[0].material.vatAmount,1000);assert.equal(backup.state.costs.length,1);
+  const bad=structuredClone(state);bad.materials[0].name='권한 없는 수정';assert.equal((await editor('/api/state',{method:'PUT',body:{revision:2,state:bad}})).status,403);
+  const tamper=structuredClone(state);tamper.costs[0].material.specification='변조';assert.equal((await editor('/api/state',{method:'PUT',body:{revision:2,state:tamper}})).status,400);
+  state.materials[0].name='새 품명';state.materialPrices[0].active=false;assert.equal((await admin('/api/state',{method:'PUT',body:{revision:2,state}})).status,200);
+  assert.equal((await admin('/api/restore',{method:'POST',body:{revision:3,backup,currentPassword:pass}})).status,200);backup=(await admin('/api/backup')).data;assert.equal(backup.state.materials[0].name,'택배박스 S');assert.equal(backup.state.costs[0].material.specification,'210×160×120');
  }finally{await app.close();}
 });

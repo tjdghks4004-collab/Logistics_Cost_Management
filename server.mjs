@@ -1,3 +1,4 @@
+import {validateMaterialMasters,validateMaterialCosts} from './materials.mjs';
 import {validateSales} from './sales.mjs';
 import {validateTargets} from './periods.mjs';
 import http from 'node:http';
@@ -6,7 +7,7 @@ import {randomBytes,scryptSync,timingSafeEqual,createHash} from 'node:crypto';
 import {mkdirSync,readFileSync,chmodSync} from 'node:fs';
 import {resolve,dirname,extname} from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {validateRecord,validParentCategory,assertNoNewCostDuplicates} from './domain.mjs';
+import {validChargeGroupMapping,validateRecord,validParentCategory,assertNoNewCostDuplicates} from './domain.mjs';
 const root=dirname(fileURLToPath(import.meta.url)),roles=['admin','editor','viewer'];
 const err=(status,message)=>Object.assign(Error(message),{status});
 const digest=s=>createHash('sha256').update(s).digest('hex');
@@ -25,8 +26,8 @@ function validateState(next,previous=null,restore=false){
  const country=c=>next.countries.some(r=>r.code===c),group=g=>next.groups.some(r=>r.id===g);
  if(next.centerMasters.some(c=>!text(c.name)||!country(c.countryCode)))throw err(400,'센터 국가 연결을 확인하세요.');
  if(next.stores.some(s=>!text(s.id)||!text(s.name,40)||!(/^[A-Z0-9_-]{1,20}$/).test(s.code)||!group(s.groupId)||typeof s.active!=='boolean'))throw err(400,'매장 마스터 값을 확인하세요.');
- if(next.masters.some(m=>!text(m.name,100)||typeof m.active!=='boolean'||(m.parentCategory!==undefined&&!validParentCategory(m.parentCategory))))throw err(400,'비용 항목 값을 확인하세요.');
- try{validateSales(next.sales??[],next);validateTargets(next.targets??[],next);}catch(e){throw err(400,e.message);}
+ if(next.masters.some(m=>!text(m.name,100)||typeof m.active!=='boolean'||(m.allowedChargeGroups!==undefined&&!validChargeGroupMapping(m.allowedChargeGroups))||(m.parentCategory!==undefined&&!validParentCategory(m.parentCategory))))throw err(400,'비용 항목 값을 확인하세요.');
+ try{validateMaterialMasters(next,restore?null:previous);validateMaterialCosts(next,previous,{restore});validateSales(next.sales??[],next);validateTargets(next.targets??[],next);}catch(e){throw err(400,e.message);}
  const old=new Map((previous?.costs||[]).map(r=>[r.id,r]));
  const ctx={countries:next.countries,groups:next.groups,centerMasters:next.centerMasters,stores:next.stores.map(s=>restore?{...s,active:true}:s),masters:next.masters.map(m=>restore?{...m,active:true}:m),units:['PLT','BOX','EA','건','KG','CBM','월','일','일괄']};
  for(const r of next.costs){
@@ -34,7 +35,7 @@ function validateState(next,previous=null,restore=false){
   if(r.recordType==='count'&&(r.amount!==0||!Number.isSafeInteger(r.quantity)||r.quantity<0))throw err(400,'건수는 정수이며 금액은 0이어야 합니다.');
   if(previous&&JSON.stringify(old.get(r.id))===JSON.stringify(r))continue;
   try{
-   const checked=validateRecord({...r,mode:r.currency&&r.currency!=='KRW'?'fx':r.quantity==null||r.price==null?'amount':'calculated'},ctx,{previous:restore?null:old.get(r.id)});
+   const checked=validateRecord({...r,mode:r.currency&&r.currency!=='KRW'?'fx':r.quantity==null||r.price==null?'amount':'calculated'},ctx,{previous:restore?r:old.get(r.id)});
    if((r.incoterm||'')!==checked.incoterm||(r.cargoType||'')!==checked.cargoType)throw Error('수출입 부가정보는 지원되는 대문자 코드로 입력하세요.');
    if((r.ciplNo||'')!==checked.ciplNo||(r.internalNo||'')!==checked.internalNo)throw Error('CIPL NO.와 내부 관리번호의 앞뒤 공백을 제거하세요.');
    if((r.chargeGroup||'')!==checked.chargeGroup||(r.namedPlace||'')!==checked.namedPlace)throw Error('비용 그룹 또는 지정 장소를 확인하세요.');
@@ -111,7 +112,7 @@ export function createApp({dbPath=process.env.LOGISTICS_DB_PATH||resolve(root,'d
     throw err(404,'지원하지 않는 API입니다.');
    }
    if(!['GET','HEAD'].includes(req.method))throw err(405,'허용되지 않는 요청입니다.');
-   const allowed=new Set(['/index.html','/login.html','/login.mjs','/style.css','/app.mjs','/api-client.mjs','/calc.mjs','/periods.mjs','/domain.mjs','/excel.mjs','/store-import.mjs','/sales.mjs','/cost-tabs.mjs','/import-data.mjs','/node_modules/exceljs/dist/exceljs.min.js']);
+   const allowed=new Set(['/index.html','/login.html','/login.mjs','/style.css','/app.mjs','/api-client.mjs','/calc.mjs','/periods.mjs','/domain.mjs','/excel.mjs','/store-import.mjs','/sales.mjs','/cost-tabs.mjs','/materials.mjs','/import-data.mjs','/node_modules/exceljs/dist/exceljs.min.js']);
    const file=path==='/'?'/index.html':path;if(!allowed.has(file))throw err(404,'파일이 없습니다.');
    const full=resolve(root,'.'+file),mime={'.html':'text/html; charset=utf-8','.mjs':'text/javascript; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8'};
    res.writeHead(200,{'Content-Type':mime[extname(file)]||'application/octet-stream','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'});res.end(req.method==='HEAD'?'':readFileSync(full));
