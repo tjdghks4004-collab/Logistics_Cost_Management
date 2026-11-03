@@ -251,7 +251,15 @@ def main():
             choose('store','all')
             page.evaluate("value=>localStorage.setItem('scm-logistics-review-v1',value)",original)
             page.reload();page.wait_for_selector('.kpi')
-            page.click('[data-view=tradeEntry]')
+            assert page.locator('nav [data-view=tradeEntry]').count()==0
+            page.click('nav [data-view=tradeReport]')
+            assert page.locator('#title').inner_text()=='수출입 비용 관리'
+            assert page.locator('#trade-tab-report').get_attribute('aria-selected')=='true'
+            page.click('#add')
+            assert page.locator('nav [data-view=tradeReport]').evaluate("el=>el.classList.contains('active')")
+            page.fill('[name=shipment]','DRAFT-PRESERVED')
+            page.click('#trade-tab-report');page.click('#trade-tab-entry')
+            assert page.locator('[name=shipment]').input_value()=='DRAFT-PRESERVED'
             page.fill('[name=shipment]','EXP-E2E-001');page.fill('[name=ciplNo]','000012-CIPL');page.fill('[name=internalNo]','SCM-001')
             page.select_option('[name=incoterm]','CIF');assert page.locator('[data-unified-row]').count()==3
             page.select_option('[name=cargoType]','FCL');assert page.locator('[data-unified-row]').count()==3
@@ -262,7 +270,10 @@ def main():
             page.select_option('[name=incoterm]','FOB');assert page.locator('[data-unified-row]').count()==2
             page.select_option('[name=incoterm]','CIF');assert page.locator('[data-unified-row]').count()==3
             assert page.locator('[data-unified-row="0"] [data-u=foreignAmount]').input_value()=='100'
-            page.click('#unified-entry button[type=submit]');page.wait_for_selector('[data-edit]')
+            page.click('#unified-entry button[type=submit]');page.wait_for_selector('#trade-report-results')
+            assert page.locator('#trade-tab-report').get_attribute('aria-selected')=='true'
+            assert 'EXP-E2E-001' in page.locator('#trade-report-results').inner_text()
+            page.click('nav [data-view=costs]');page.wait_for_selector('[data-edit]')
             assert page.locator('tbody tr').count()==20
             page.click('[data-cost-tab=trade]');assert page.locator('[data-edit]').count()==2
             page.click('[data-cost-tab=center]');assert page.locator('[data-edit]').count()==18

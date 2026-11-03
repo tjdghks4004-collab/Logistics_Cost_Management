@@ -150,6 +150,11 @@ def main():
             page.fill('[name=username]','scm_viewer');page.fill('[name=password]',password);page.click('#login-form button');page.wait_for_selector('.kpi')
             assert page.locator('[data-view=entry]').is_hidden() and page.locator('#add').is_hidden()
             assert page.evaluate("async()=>(await fetch('/api/backup')).status")==403
+            page.click('nav [data-view=tradeReport]')
+            assert page.locator('#trade-tab-report').is_enabled()
+            assert page.locator('#trade-tab-entry').count()==0
+            assert page.locator('#trade-query').is_enabled()
+            assert page.locator('#add').is_hidden()
             page.click('[data-view=costs]');assert page.locator('[data-cost-tab=trade]').is_enabled()
             page.click('[data-cost-tab=trade]');assert page.locator('#upload').is_disabled()
             page.click('[data-view=activity]')
