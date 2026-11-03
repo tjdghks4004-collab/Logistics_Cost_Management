@@ -97,6 +97,23 @@ def main():
             page.locator('#center').evaluate("el=>{el.value='검증센터';el.dispatchEvent(new Event('change'))}")
             assert page.locator('.kpi .value').nth(2).inner_text()=='—'
             page.locator('#center').evaluate("el=>{el.value='all';el.dispatchEvent(new Event('change'))}")
+            # Deletion is opt-in, scoped to checked rows, and does not touch costs or masters.
+            page.click('[data-view=activity]')
+            before_delete=workspace()
+            page.locator('[data-sales-delete]').first.click()
+            assert page.locator('#sales-delete-commit').is_disabled()
+            page.click('#sales-delete-cancel');assert workspace()['sales']==before_delete['sales']
+            page.check('#sales-select-all');page.click('#sales-delete-selected')
+            assert '2건' in page.locator('#sales-delete-preview').inner_text()
+            page.check('#sales-delete-confirm');page.click('#sales-delete-commit')
+            page.wait_for_function("async()=>((await (await fetch('/api/state')).json()).state.sales.length===1)")
+            deleted=workspace();assert deleted['sales'][0]['month']=='2026-11'
+            for key in ['costs','stores','groups','activity','notes']:assert deleted[key]==before_delete[key]
+            page.reload();page.wait_for_selector('.kpi');assert len(workspace()['sales'])==1
+            page.locator('#month').evaluate("el=>{el.value='2026-10';el.dispatchEvent(new Event('change'))}")
+            page.click('[data-view=activity]')
+            page.set_input_files('#sales-file',str(sales_filled));page.wait_for_selector('#sales-save');page.check('#sales-confirm');page.click('#sales-save')
+            page.wait_for_function("async()=>((await (await fetch('/api/state')).json()).state.sales.length===3)")
             # Create the remaining two SCM users through the authenticated admin UI.
             page.click('[data-view=settings]')
             for username,role in [('scm_editor','editor'),('scm_viewer','viewer')]:
@@ -112,6 +129,8 @@ def main():
             page.fill('[name=username]','scm_viewer');page.fill('[name=password]',password);page.click('#login-form button');page.wait_for_selector('.kpi')
             assert page.locator('[data-view=entry]').is_hidden() and page.locator('#add').is_hidden()
             assert page.evaluate("async()=>(await fetch('/api/backup')).status")==403
+            page.click('[data-view=activity]')
+            assert page.locator('[data-sales-delete],#sales-delete-selected,#sales-select-all').count()==0
             assert not errors,errors
             print('PASS: actual login + empty setup + masters + costs/counts + real XLSX upload + bulk store master + ERP revenue/KPI/no-op import + legacy preservation + SQLite persistence/restart + 3 users + viewer permissions + backup; no production data touched')
         finally:

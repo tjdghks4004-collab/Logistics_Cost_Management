@@ -58,3 +58,14 @@ export async function buildSalesTemplate(ExcelJS){
  for(const row of [['ERP 매출 업로드','ERP 원장의 매출일자·매장코드·매장명·상품매출 열을 그대로 읽습니다. 기본 금액 열은 상품매출입니다. 순매출·총매출로 변경할 수 있습니다.'],['집계 기준','월·매장별 합계. 반품 등 음수 매출을 포함하며 소수 금액은 월별 합산 후 원 단위 반올림합니다.'],['출고 건수와 구분','판매수량은 출고 건수가 아닙니다. 판매수량은 출고 KPI에 반영하지 않습니다.'],['재업로드','월·매장별 기존 금액을 교체합니다. 파일에 없는 월·매장은 유지합니다. 재업로드할 월·매장의 전체 자료를 사용하세요.'],['센터 배분 없음','매출은 센터·국가·업무에 임의 배분하지 않습니다. 이 필터를 좁히면 해당 ERP 매출을 분모로 하는 물류비율은 계산하지 않습니다.']])guide.addRow(row);
  guide.eachRow(r=>{r.height=45;r.alignment={wrapText:true,vertical:'middle'};});const sheet=wb.addWorksheet('매출 입력');sheet.columns=['매출일자','매장코드','매장명','상품매출'].map(header=>({header,width:25}));sheet.getColumn(1).numFmt='@';sheet.getColumn(2).numFmt='@';sheet.views=[{state:'frozen',ySplit:1}];return wb;
 }
+
+export function planSalesDeletion(ids,ctx){
+ const selected=new Set(ids);if(!selected.size)throw Error('삭제할 매출을 선택하세요.');
+ const rows=(ctx.sales||[]).filter(r=>selected.has(r.id));if(rows.length!==selected.size)throw Error('선택한 매출 자료가 변경되었거나 없습니다. 다시 조회하세요.');
+ return {rows:structuredClone(rows),signature:JSON.stringify(rows)};
+}
+export function applySalesDeletion(plan,ctx){
+ const ids=new Set(plan.rows.map(r=>r.id)),current=(ctx.sales||[]).filter(r=>ids.has(r.id));
+ if(!ids.size||JSON.stringify(current)!==plan.signature)throw Error('삭제 대상이 변경되었습니다. 다시 선택해 확인하세요.');
+ return {...ctx,sales:(ctx.sales||[]).filter(r=>!ids.has(r.id))};
+}
