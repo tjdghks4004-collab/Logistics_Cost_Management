@@ -1,6 +1,6 @@
 import {unifiedHeaders,domainLabels} from './domain.mjs';
 import {buildUnifiedTemplate} from './excel.mjs';
-export const costTabLabels={all:'전체 내역',center:'물류센터 비용·건수',trade:'수출입 비용',common:'공통 비용'};
+export const costTabLabels={all:'전체 내역',center:'물류센터 비용 관리',trade:'수출입 비용',common:'공통 비용'};
 export const costTabHeaders={
  center:['월','데이터유형','센터','업무구분','매장코드','매장명','관리그룹','비용항목','청구단위','수량','단가','값','메모'],
  trade:unifiedHeaders.filter(h=>!['비용유형','데이터유형','센터'].includes(h)),
