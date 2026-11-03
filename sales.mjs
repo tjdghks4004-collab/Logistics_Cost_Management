@@ -70,3 +70,11 @@ export function applySalesDeletion(plan,ctx){
  if(!ids.size||JSON.stringify(current)!==plan.signature)throw Error('삭제 대상이 변경되었습니다. 다시 선택해 확인하세요.');
  return {...ctx,sales:(ctx.sales||[]).filter(r=>!ids.has(r.id))};
 }
+
+export const salesSortKeys=['month','storeCode','storeName','groupName','basis','sourceRows','amount'];
+export function sortSalesRows(rows,{key='month',direction='desc'}={},ctx){
+ const selected=salesSortKeys.includes(key)?key:'month',sign=direction==='asc'?1:-1,stores=new Map(ctx.stores.map(s=>[s.id,s])),groups=new Map(ctx.groups.map(g=>[g.id,g]));
+ const text=(a,b)=>String(a??'').localeCompare(String(b??''),'ko');
+ const value=(row,k)=>k==='storeCode'?stores.get(row.storeId)?.code||'':k==='storeName'?stores.get(row.storeId)?.name||'':k==='groupName'?groups.get(row.groupId)?.name||'':row[k];
+ return [...rows].sort((a,b)=>{const comparison=['amount','sourceRows'].includes(selected)?Number(value(a,selected))-Number(value(b,selected)):text(value(a,selected),value(b,selected));return sign*comparison||text(b.month,a.month)||text(value(a,'storeCode'),value(b,'storeCode'))||text(a.id,b.id);});
+}

@@ -90,6 +90,19 @@ def main():
             page.wait_for_function("async()=>((await (await fetch('/api/state')).json()).state.sales?.length===3)")
             sales_before=workspace()['sales'];assert workspace()['stores'][0]['name']=='검증매장 개정';assert page.locator('[data-sales-id]').filter(has_text='검증매장 개정').count()>0;assert page.locator('#sales-total').inner_text()=='₩1,000,000'
             assert workspace()['activity'][0]['volume']==999 and len(workspace()['notes'])==1
+            # Header sorting is numeric, retains checked IDs, and never changes server data.
+            sort_state=workspace();checked_id=page.locator('[data-sales-select]').first.get_attribute('data-sales-select');page.locator('[data-sales-select]').first.check()
+            page.click('[data-sales-sort=amount]')
+            assert page.locator('th[aria-sort="descending"] [data-sales-sort=amount]').count()==1
+            current_ids=page.locator('[data-sales-id]').evaluate_all('els=>els.map(e=>e.dataset.salesId)')
+            amounts={r['id']:r['amount'] for r in sort_state['sales']}
+            assert [amounts[id] for id in current_ids]==sorted([amounts[id] for id in current_ids],reverse=True)
+            assert page.locator(f'[data-sales-select="{checked_id}"]').is_checked()
+            page.click('[data-sales-sort=amount]');assert page.locator('th[aria-sort="ascending"] [data-sales-sort=amount]').count()==1
+            for key in ['month','storeCode','storeName','groupName','basis','sourceRows']:page.click(f'[data-sales-sort={key}]')
+            assert workspace()==sort_state
+            page.locator(f'[data-sales-select="{checked_id}"]').uncheck()
+
             page.set_input_files('#sales-file',str(sales_filled));page.wait_for_selector('#sales-save');page.check('#sales-confirm');assert page.locator('#sales-save').is_disabled();assert workspace()['sales']==sales_before
             page.click('#sales-cancel');page.click('[data-view=dashboard]')
             assert page.locator('.kpi .value').nth(3).inner_text()=='100건'
@@ -131,6 +144,8 @@ def main():
             assert page.evaluate("async()=>(await fetch('/api/backup')).status")==403
             page.click('[data-view=activity]')
             assert page.locator('[data-sales-delete],#sales-delete-selected,#sales-select-all').count()==0
+            assert page.locator('[data-sales-sort=amount]').is_enabled()
+            page.click('[data-sales-sort=amount]');assert page.locator('th[aria-sort="descending"] [data-sales-sort=amount]').count()==1
             assert not errors,errors
             print('PASS: actual login + empty setup + masters + costs/counts + real XLSX upload + bulk store master + ERP revenue/KPI/no-op import + legacy preservation + SQLite persistence/restart + 3 users + viewer permissions + backup; no production data touched')
         finally:
