@@ -48,10 +48,18 @@ def main():
             assert page.locator('.kpi .value').nth(1).inner_text()=='₩500/건'
             # Download and import a real XLSX through the server-backed app.
             page.click('[data-view=costs]')
+            page.click('[data-cost-tab=center]')
+            assert page.locator('[data-cost-tab=center]').get_attribute('aria-selected')=='true'
+            assert page.locator('#domain').evaluate('el=>el.closest("label").hidden')
             with page.expect_download() as download:page.click('#template')
             template=Path(tmp)/'template.xlsx';filled=Path(tmp)/'filled.xlsx';download.value.save_as(str(template))
             generator="""import ExcelJS from 'exceljs';const book=new ExcelJS.Workbook();await book.xlsx.readFile(process.argv[1]);const sheet=book.getWorksheet('통합 입력'),headers=sheet.getRow(1).values.slice(1);const row={'월':'2026-10','비용유형':'물류센터','데이터유형':'비용','국가코드':'KR','센터':'검증센터','업무구분':'B2C','매장코드':'SCM001','비용항목':'임가공비(라벨링)','청구단위':'EA','수량':10,'단가':200};sheet.getRow(2).values=headers.map(h=>row[h]??'');await book.xlsx.writeFile(process.argv[2]);"""
             subprocess.run(['node','--input-type=module','-e',generator,str(template),str(filled)],cwd=ROOT,check=True,capture_output=True,text=True)
+            page.click('[data-cost-tab=trade]')
+            assert page.locator('#center').evaluate('el=>el.closest("label").hidden')
+            page.set_input_files('#file',str(filled));page.wait_for_selector('#commit-import');assert page.locator('#commit-import').is_disabled()
+            assert '해당 탭' in page.locator('#upload-review').inner_text()
+            page.once('dialog',lambda d:d.accept());page.click('[data-cost-tab=center]')
             page.set_input_files('#file',str(filled));page.wait_for_selector('#commit-import');page.click('#commit-import')
             page.wait_for_function("async()=>((await (await fetch('/api/state')).json()).state.costs.length===3)")
             page.click('[data-view=dashboard]');assert page.locator('.kpi .value').first.inner_text()=='₩52,000'
@@ -142,6 +150,8 @@ def main():
             page.fill('[name=username]','scm_viewer');page.fill('[name=password]',password);page.click('#login-form button');page.wait_for_selector('.kpi')
             assert page.locator('[data-view=entry]').is_hidden() and page.locator('#add').is_hidden()
             assert page.evaluate("async()=>(await fetch('/api/backup')).status")==403
+            page.click('[data-view=costs]');assert page.locator('[data-cost-tab=trade]').is_enabled()
+            page.click('[data-cost-tab=trade]');assert page.locator('#upload').is_disabled()
             page.click('[data-view=activity]')
             assert page.locator('[data-sales-delete],#sales-delete-selected,#sales-select-all').count()==0
             assert page.locator('[data-sales-sort=amount]').is_enabled()

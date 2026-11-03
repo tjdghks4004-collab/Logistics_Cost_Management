@@ -148,6 +148,13 @@ def main():
                 assert len(values)==len(set(values))
             page.click('[data-view=costs]')
             assert page.locator('[data-edit]').count()==36
+            page.click('[data-cost-tab=center]');assert page.locator('[data-edit]').count()==36
+            page.click('[data-cost-tab=trade]');assert page.locator('[data-edit]').count()==0
+            assert page.locator('#center').evaluate('el=>el.closest("label").hidden')
+            page.click('[data-cost-tab=common]');assert page.locator('[data-edit]').count()==0
+            page.click('#cost-tab-entry');assert page.locator('#unified-entry').get_attribute('data-domain')=='common'
+            page.click('[data-view=costs]');page.click('[data-cost-tab=all]')
+
             with page.expect_download() as multi_download:page.click('#export')
             multi_csv=Path(multi_download.value.path()).read_text(encoding='utf-8-sig')
             assert '2026-08' in multi_csv and '2026-10' in multi_csv and '2026-09' not in multi_csv
@@ -257,6 +264,10 @@ def main():
             assert page.locator('[data-unified-row="0"] [data-u=foreignAmount]').input_value()=='100'
             page.click('#unified-entry button[type=submit]');page.wait_for_selector('[data-edit]')
             assert page.locator('tbody tr').count()==20
+            page.click('[data-cost-tab=trade]');assert page.locator('[data-edit]').count()==2
+            page.click('[data-cost-tab=center]');assert page.locator('[data-edit]').count()==18
+            page.click('[data-cost-tab=all]')
+
             assert page.evaluate("JSON.parse(localStorage.getItem('scm-logistics-review-v1')).costs.length")==110
             page.locator('[data-edit]').nth(18).click();page.fill('#record-edit [name=exchangeRate]','1400');page.click('#record-edit button[type=submit]')
             page.wait_for_selector('#record-edit',state='detached');assert '140,000' in page.locator('tbody').inner_text()
