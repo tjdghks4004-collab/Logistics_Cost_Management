@@ -149,9 +149,17 @@ def main():
             page.click('[data-view=costs]')
             assert page.locator('[data-edit]').count()==36
             page.click('[data-cost-tab=center]');assert page.locator('[data-edit]').count()==36
+            center_columns=page.locator('#cost-records-table th').all_text_contents()
+            assert '센터' in center_columns and '유형 / 업무' in center_columns and '수출입관리번호' not in center_columns
+            assert page.locator('#cost-records-table tbody tr').first.locator('td').count()==len(center_columns)
             page.click('[data-cost-tab=trade]');assert page.locator('[data-edit]').count()==0
+            trade_columns=page.locator('#cost-records-table th').all_text_contents()
+            assert '센터' not in trade_columns and '수출입관리번호' in trade_columns and '외화·환율 근거' in trade_columns and '출발국 → 도착국' in trade_columns
             assert page.locator('#center').evaluate('el=>el.closest("label").hidden')
             page.click('[data-cost-tab=common]');assert page.locator('[data-edit]').count()==0
+            common_columns=page.locator('#cost-records-table th').all_text_contents()
+            assert '센터' not in common_columns and '수출입관리번호' not in common_columns and '금액 (KRW)' in common_columns
+            assert len(common_columns)<len(trade_columns)
             page.click('#cost-tab-entry');assert page.locator('#unified-entry').get_attribute('data-domain')=='common'
             page.click('[data-view=costs]');page.click('[data-cost-tab=all]')
 
@@ -276,6 +284,8 @@ def main():
             page.click('nav [data-view=costs]');page.wait_for_selector('[data-edit]')
             assert page.locator('tbody tr').count()==20
             page.click('[data-cost-tab=trade]');assert page.locator('[data-edit]').count()==2
+            assert page.locator('#cost-records-table tbody tr').first.locator('td').count()==len(trade_columns)
+            assert 'EXP-E2E-001' in page.locator('#cost-records-table').inner_text()
             page.click('[data-cost-tab=center]');assert page.locator('[data-edit]').count()==18
             page.click('[data-cost-tab=all]')
 
