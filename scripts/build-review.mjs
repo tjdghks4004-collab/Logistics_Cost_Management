@@ -39,7 +39,7 @@ html=html.replace(/<button data-view="settings">[\s\S]*?<\/button>/,'');
 html=html.replace('<button id="logout">로그아웃</button>','<button id="logout" hidden>검토본</button>');
 html=html.replace('<section class="heading">','<div class="review-notice"><div><strong>예시 데이터 화면 검토본</strong>이 파일에서 자유롭게 입력·수정해 보세요. 자료는 현재 브라우저에만 저장되며 팀원과 공유되지 않습니다. 실제 업무 자료는 사이트 준비 후 입력하세요.</div><button id="review-reset">예시 데이터 초기화</button></div><section class="heading">');
 html=html.replace('WORKSPACE <span>SCM</span>','WORKSPACE <span>DEMO</span>');
-html=html.replaceAll('독립 프로젝트 · 서버 DB 저장','독립 프로젝트 · 예시 검토본').replaceAll('서버 DB 저장 · 외부 AI 미연결','검토본 · 현재 브라우저 저장');
+html=html.replaceAll('독립 프로젝트 · 서버 DB 저장','독립 프로젝트 · 예시 검토본');
 const safeScript=code=>code.replace(/<\/script/gi,'<\\/script');
 html=html.replace('</body>',()=>`<script>${safeScript(read('node_modules/exceljs/dist/exceljs.min.js'))}</script><script type="module">${safeScript(moduleCode)}</script></body>`);
 mkdirSync(dirname(out),{recursive:true});writeFileSync(out,html);
