@@ -1,3 +1,4 @@
+import {validateSales} from './sales.mjs';
 import {validateTargets} from './periods.mjs';
 import http from 'node:http';
 import {DatabaseSync} from 'node:sqlite';
@@ -25,7 +26,7 @@ function validateState(next,previous=null,restore=false){
  if(next.centerMasters.some(c=>!text(c.name)||!country(c.countryCode)))throw err(400,'센터 국가 연결을 확인하세요.');
  if(next.stores.some(s=>!text(s.id)||!text(s.name,40)||!(/^[A-Z0-9_-]{1,20}$/).test(s.code)||!group(s.groupId)||typeof s.active!=='boolean'))throw err(400,'매장 마스터 값을 확인하세요.');
  if(next.masters.some(m=>!text(m.name,100)||typeof m.active!=='boolean'||(m.parentCategory!==undefined&&!validParentCategory(m.parentCategory))))throw err(400,'비용 항목 값을 확인하세요.');
- try{validateTargets(next.targets??[],next);}catch(e){throw err(400,e.message);}
+ try{validateSales(next.sales??[],next);validateTargets(next.targets??[],next);}catch(e){throw err(400,e.message);}
  const old=new Map((previous?.costs||[]).map(r=>[r.id,r]));
  const ctx={countries:next.countries,groups:next.groups,centerMasters:next.centerMasters,stores:next.stores.map(s=>restore?{...s,active:true}:s),masters:next.masters.map(m=>restore?{...m,active:true}:m),units:['PLT','BOX','EA','건','KG','CBM','월','일','일괄']};
  for(const r of next.costs){
@@ -65,7 +66,7 @@ export function createApp({dbPath=process.env.LOGISTICS_DB_PATH||resolve(root,'d
  const readBody=async req=>{let size=0,chunks=[];for await(const chunk of req){size+=chunk.length;if(size>10e6)throw err(413,'요청 크기는 10MB 이하입니다.');chunks.push(chunk);}try{return JSON.parse(Buffer.concat(chunks).toString()||'{}');}catch{throw err(400,'JSON 형식이 올바르지 않습니다.');}};
  function writeWorkspace(next,revision,user,action){
   db.exec('BEGIN IMMEDIATE');try{const current=workspace();if(revision!==current.revision)throw err(409,'다른 사용자가 자료를 변경했습니다. 입력 내용을 보관한 후 새로고침해 다시 확인하세요.');validateState(next,current.state,action==='restore');
-   if(user.role==='editor')for(const key of new Set([...Object.keys(current.state||{}),...Object.keys(next)]))if(!['costs','activity','notes'].includes(key)&&JSON.stringify(current.state?.[key])!==JSON.stringify(next[key]))throw err(403,'기준정보 변경은 관리자만 가능합니다.');
+   if(user.role==='editor')for(const key of new Set([...Object.keys(current.state||{}),...Object.keys(next)]))if(!['costs','activity','notes','sales'].includes(key)&&JSON.stringify(current.state?.[key])!==JSON.stringify(next[key]))throw err(403,'기준정보 변경은 관리자만 가능합니다.');
    if(current.state){db.prepare('INSERT INTO snapshots(at,revision,document) VALUES(?,?,?)').run(new Date().toISOString(),current.revision,JSON.stringify(current.state));db.exec('DELETE FROM snapshots WHERE id NOT IN (SELECT id FROM snapshots ORDER BY id DESC LIMIT 20)');}
    const rev=current.revision+1;db.prepare('INSERT INTO workspace VALUES(1,?,?) ON CONFLICT(id) DO UPDATE SET revision=excluded.revision,document=excluded.document').run(rev,JSON.stringify(next));audit(user.username,action,{revision:rev,changes:changes(current.state,next)});db.exec('COMMIT');return {revision:rev};
   }catch(e){db.exec('ROLLBACK');throw e;}
@@ -107,7 +108,7 @@ export function createApp({dbPath=process.env.LOGISTICS_DB_PATH||resolve(root,'d
     throw err(404,'지원하지 않는 API입니다.');
    }
    if(!['GET','HEAD'].includes(req.method))throw err(405,'허용되지 않는 요청입니다.');
-   const allowed=new Set(['/index.html','/login.html','/login.mjs','/style.css','/app.mjs','/api-client.mjs','/calc.mjs','/periods.mjs','/domain.mjs','/excel.mjs','/store-import.mjs','/import-data.mjs','/node_modules/exceljs/dist/exceljs.min.js']);
+   const allowed=new Set(['/index.html','/login.html','/login.mjs','/style.css','/app.mjs','/api-client.mjs','/calc.mjs','/periods.mjs','/domain.mjs','/excel.mjs','/store-import.mjs','/sales.mjs','/import-data.mjs','/node_modules/exceljs/dist/exceljs.min.js']);
    const file=path==='/'?'/index.html':path;if(!allowed.has(file))throw err(404,'파일이 없습니다.');
    const full=resolve(root,'.'+file),mime={'.html':'text/html; charset=utf-8','.mjs':'text/javascript; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8'};
    res.writeHead(200,{'Content-Type':mime[extname(file)]||'application/octet-stream','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'});res.end(req.method==='HEAD'?'':readFileSync(full));

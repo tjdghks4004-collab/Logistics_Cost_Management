@@ -2,7 +2,7 @@ export const sum = rows => rows.reduce((n,r)=>n+(r.recordType==='count'?0:Number
 export function metrics(rows, activity) {
  const cost=sum(rows), vat=rows.reduce((n,r)=>n+Number(r.vat||0),0);
  const volume=activity.reduce((n,r)=>n+Number(r.volume),0), sales=activity.reduce((n,r)=>n+Number(r.sales),0);
- return {cost,vat,volume,sales,unit:volume?cost/volume:null,ratio:sales?cost/sales*100:null};
+ return {cost,vat,volume,sales,unit:volume?cost/volume:null,ratio:sales>0?cost/sales*100:null};
 }
 export const change=(current,previous)=>previous?(current/previous-1)*100:null;
 export function parseCSV(text) {

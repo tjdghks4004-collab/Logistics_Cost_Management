@@ -64,3 +64,14 @@ test('category parents persist without rewriting costs and invalid parent metada
  const backup=(await c('/api/backup')).data;assert.equal(backup.state.masters[0].parentCategory,'물류센터 비용');assert.deepEqual(backup.state.costs,state.costs);
  state.masters[0].parentCategory=' ';assert.equal((await c('/api/state',{method:'PUT',body:{revision:2,state}})).status,400);assert.equal((await c('/api/state')).data.state.masters[0].parentCategory,'물류센터 비용');
  }finally{await app.close();}});
+
+test('ERP sales persist with backups, remain editor-writable and reject duplicates/viewer writes',async()=>{const app=await start(),admin=client(app.url),pass=password();try{
+ await admin('/api/setup',{method:'POST',body:{username:'sales_admin',password:pass}});await admin('/api/login',{method:'POST',body:{username:'sales_admin',password:pass}});
+ const state=initial();assert.equal((await admin('/api/state',{method:'PUT',body:{revision:0,state}})).status,200);
+ for(const role of ['editor','viewer'])await admin('/api/users',{method:'POST',body:{username:'sales_'+role,password:pass,role}});
+ const editor=client(app.url),viewer=client(app.url);await editor('/api/login',{method:'POST',body:{username:'sales_editor',password:pass}});await viewer('/api/login',{method:'POST',body:{username:'sales_viewer',password:pass}});
+ state.sales=[{id:'sale1',month:'2026-10',storeId:'s1',groupId:'g1',amount:100000,sourceRows:5,basis:'상품매출',source:'erp'}];
+ assert.equal((await editor('/api/state',{method:'PUT',body:{revision:1,state}})).status,200);assert.equal((await admin('/api/backup')).data.state.sales[0].amount,100000);
+ assert.equal((await viewer('/api/state',{method:'PUT',body:{revision:2,state}})).status,403);
+ const bad={...state,sales:[...state.sales,{...state.sales[0],id:'sale2'}]};assert.equal((await editor('/api/state',{method:'PUT',body:{revision:2,state:bad}})).status,400);assert.equal((await admin('/api/state')).data.state.sales.length,1);
+ }finally{await app.close();}});

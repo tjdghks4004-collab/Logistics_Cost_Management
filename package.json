@@ -6,7 +6,7 @@
     "start": "node server.mjs",
     "start:local": "node scripts/start-local.mjs",
     "release:build": "python3 scripts/build-release.py",
-    "test": "node --test store-import.test.mjs periods.test.mjs tests.mjs excel.test.mjs domain.test.mjs server.test.mjs scripts/review.test.mjs",
+    "test": "node --test sales.test.mjs store-import.test.mjs periods.test.mjs tests.mjs excel.test.mjs domain.test.mjs server.test.mjs scripts/review.test.mjs",
     "admin:init": "node admin.mjs",
     "db:backup": "node backup-db.mjs",
     "test:backup": "python3 -m unittest discover -s deploy/backup -p \"test_*.py\" -v",

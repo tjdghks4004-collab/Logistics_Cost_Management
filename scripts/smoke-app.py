@@ -72,23 +72,48 @@ def main():
             after_bulk=workspace();assert after_bulk['stores'][0]['id']==old_store_id;assert after_bulk['stores'][0]['name']=='검증매장 개정';assert after_bulk['stores'][1]['code']=='0002';assert after_bulk['stores'][1]['active'] is False
             assert after_bulk['costs']==old_costs;assert len(after_bulk['groups'])==2
             page.reload();page.wait_for_selector('.kpi');assert workspace()['stores']==after_bulk['stores']
+            # Preserve legacy metrics/notes while replacing only the visible workflow.
+            page.evaluate("""async()=>{const me=await (await fetch('/api/me')).json(),doc=await (await fetch('/api/state')).json();doc.state.activity=[{month:'2026-10',center:'검증센터',countryCode:'KR',volume:999,sales:999999}];doc.state.notes=[{month:'2026-10',reason:'기존 기록',plan:'보존',owner:'SCM'}];const res=await fetch('/api/state',{method:'PUT',headers:{'Content-Type':'application/json','X-CSRF-Token':me.csrf},body:JSON.stringify({revision:doc.revision,state:doc.state})});if(!res.ok)throw Error('legacy fixture failed');}""")
+            page.reload();page.wait_for_selector('.kpi');assert page.locator('[data-view=notes]').count()==0
+            assert page.locator('.kpi .value').nth(3).inner_text()=='100건'
+            assert workspace()['activity'][0]['volume']==999
+            page.click('[data-view=activity]')
+            assert page.locator('#title').inner_text()=='매출 관리'
+            assert page.locator('#activity-add,[name=volume]').count()==0
+            assert page.locator('#center').evaluate('el=>el.closest("label").hidden')
+            with page.expect_download() as download:page.click('#sales-template')
+            sales_template=Path(tmp)/'sales-template.xlsx';sales_filled=Path(tmp)/'erp-sales.xlsx';download.value.save_as(str(sales_template))
+            sales_generator="""import ExcelJS from 'exceljs';const book=new ExcelJS.Workbook();await book.xlsx.readFile(process.argv[1]);const s=book.getWorksheet('매출 입력');s.getCell('E1').value='판매수량';s.getRow(2).values=['20261001','SCM001','검증매장 개정',1000000,5000];s.getRow(3).values=['20261002','SCM001','검증매장 개정',-100000,-500];s.getRow(4).values=['20261003','0002','추가매장',100000,800];s.getRow(5).values=['20261101','SCM001','검증매장 개정',200000,200];await book.xlsx.writeFile(process.argv[2]);"""
+            subprocess.run(['node','--input-type=module','-e',sales_generator,str(sales_template),str(sales_filled)],cwd=ROOT,check=True,capture_output=True,text=True)
+            page.set_input_files('#sales-file',str(sales_filled));page.wait_for_selector('#sales-save');assert page.locator('#sales-save').is_disabled();assert not workspace().get('sales')
+            page.check('#sales-confirm');page.click('#sales-save')
+            page.wait_for_function("async()=>((await (await fetch('/api/state')).json()).state.sales?.length===3)")
+            sales_before=workspace()['sales'];assert page.locator('#sales-total').inner_text()=='₩1,000,000'
+            assert workspace()['activity'][0]['volume']==999 and len(workspace()['notes'])==1
+            page.set_input_files('#sales-file',str(sales_filled));page.wait_for_selector('#sales-save');page.check('#sales-confirm');assert page.locator('#sales-save').is_disabled();assert workspace()['sales']==sales_before
+            page.click('#sales-cancel');page.click('[data-view=dashboard]')
+            assert page.locator('.kpi .value').nth(3).inner_text()=='100건'
+            assert page.locator('.kpi .value').nth(2).inner_text()=='5.20%'
+            page.locator('#center').evaluate("el=>{el.value='검증센터';el.dispatchEvent(new Event('change'))}")
+            assert page.locator('.kpi .value').nth(2).inner_text()=='—'
+            page.locator('#center').evaluate("el=>{el.value='all';el.dispatchEvent(new Event('change'))}")
             # Create the remaining two SCM users through the authenticated admin UI.
             page.click('[data-view=settings]')
             for username,role in [('scm_editor','editor'),('scm_viewer','viewer')]:
                 page.fill('#user-form [name=username]',username);page.fill('#user-form [name=name]',username);page.fill('#user-form [name=password]',password);page.select_option('#user-form [name=role]',role);page.click('#user-form button')
                 page.wait_for_function('(name)=>document.querySelector("#user-list").textContent.includes(name)',arg=username)
             with page.expect_download() as download:page.click('#backup-download')
-            backup=json.loads(Path(download.value.path()).read_text());assert len(backup['state']['costs'])==3
+            backup=json.loads(Path(download.value.path()).read_text());assert len(backup['state']['costs'])==3 and len(backup['state']['sales'])==3 and len(backup['state']['notes'])==1
             # Real process restart; no browser storage contains the workspace.
             assert page.evaluate('localStorage.length')==0
             stop(server);server,origin=start();page.context.clear_cookies();page.goto(origin);page.wait_for_selector('#login-form')
-            page.fill('[name=username]','scm_admin');page.fill('[name=password]',password);page.click('#login-form button');page.wait_for_selector('.kpi');assert page.locator('.kpi .value').first.inner_text()=='₩52,000'
+            page.fill('[name=username]','scm_admin');page.fill('[name=password]',password);page.click('#login-form button');page.wait_for_selector('.kpi');page.locator('#month').evaluate("el=>{el.value='2026-10';el.dispatchEvent(new Event('change'))}");assert page.locator('.kpi .value').first.inner_text()=='₩52,000';assert len(workspace()['sales'])==3
             page.click('#logout');page.wait_for_selector('#login-form')
             page.fill('[name=username]','scm_viewer');page.fill('[name=password]',password);page.click('#login-form button');page.wait_for_selector('.kpi')
             assert page.locator('[data-view=entry]').is_hidden() and page.locator('#add').is_hidden()
             assert page.evaluate("async()=>(await fetch('/api/backup')).status")==403
             assert not errors,errors
-            print('PASS: actual login + empty setup + masters + costs/counts + real XLSX upload + bulk store master preview/upsert + SQLite persistence/restart + 3 users + viewer permissions + backup; no production data touched')
+            print('PASS: actual login + empty setup + masters + costs/counts + real XLSX upload + bulk store master + ERP revenue/KPI/no-op import + legacy preservation + SQLite persistence/restart + 3 users + viewer permissions + backup; no production data touched')
         finally:
             browser.close();stop(server)
 
