@@ -33,3 +33,11 @@ test('code-based import links stable store and center country, supports old name
  const sheet=wb.getWorksheet('비용 입력');sheet.getRow(2).values=['2026-10','인천 물류센터','SHOP001','','작업비','BOX',2,500,''];sheet.getCell('D2').value={formula:'1+1',result:'서울점'};
  const result=validateImport(workbookLines(wb),context);assert.deepEqual(result.errors,[]);assert.equal(result.entries[0].amount,1000);assert.equal(result.entries[0].storeId,'s1');assert.ok(!('vat' in result.entries[0]));
  });
+
+test('unified workbooks reject numeric store codes and values beyond the declared schema',async()=>{
+ const {buildUnifiedTemplate}=await import('./excel.mjs');
+ const ctx={...context,countries:[{code:'KR',name:'대한민국'}],centerMasters:[{name:'인천 물류센터',countryCode:'KR'}],groups:[{id:'g1',name:'직영그룹'}]};
+ const wb=await buildUnifiedTemplate(ExcelJS,ctx),s=wb.getWorksheet('통합 입력');s.getCell(2,11).value=12;
+ assert.throws(()=>workbookLines(wb),/매장코드.*텍스트/);s.getCell(2,11).value='0012';s.getCell(2,32).value=123;
+ assert.throws(()=>workbookLines(wb),/추가 열/);
+});

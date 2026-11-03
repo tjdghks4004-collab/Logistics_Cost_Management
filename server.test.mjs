@@ -75,3 +75,26 @@ test('ERP sales persist with backups, remain editor-writable and reject duplicat
  assert.equal((await viewer('/api/state',{method:'PUT',body:{revision:2,state}})).status,403);
  const bad={...state,sales:[...state.sales,{...state.sales[0],id:'sale2'}]};assert.equal((await editor('/api/state',{method:'PUT',body:{revision:2,state:bad}})).status,400);assert.equal((await admin('/api/state')).data.state.sales.length,1);
  }finally{await app.close();}});
+
+test('new duplicate costs are rejected atomically and inactive historical edits preserve the original allocation',async()=>{
+ const app=await start(),c=client(app.url),pass=password();try{
+  await c('/api/setup',{method:'POST',body:{username:'historyadmin',password:pass}});await c('/api/login',{method:'POST',body:{username:'historyadmin',password:pass}});
+  const state=initial();state.costs=[row('old')];assert.equal((await c('/api/state',{method:'PUT',body:{revision:0,state}})).status,200);
+  const duplicate=structuredClone(state);duplicate.costs.push({...duplicate.costs[0],id:'repeat'});
+  const rejected=await c('/api/state',{method:'PUT',body:{revision:1,state:duplicate}});assert.equal(rejected.status,400);assert.match(rejected.data.error,/중복/);
+  assert.equal((await c('/api/state')).data.revision,1);assert.equal((await c('/api/state')).data.state.costs.length,1);
+  state.groups.push({id:'g2',name:'새 소속'});state.stores[0].groupId='g2';state.stores[0].active=false;state.masters[0].active=false;
+  assert.equal((await c('/api/state',{method:'PUT',body:{revision:1,state}})).status,200);
+  state.costs[0].memo='과거 비용 메모 수정';assert.equal((await c('/api/state',{method:'PUT',body:{revision:2,state}})).status,200);
+  const saved=(await c('/api/state')).data.state;assert.equal(saved.costs[0].groupId,'g1');assert.equal(saved.costs[0].memo,'과거 비용 메모 수정');
+  const backup=(await c('/api/backup')).data;assert.equal((await c('/api/restore',{method:'POST',body:{revision:3,backup,currentPassword:pass}})).status,200);
+  assert.equal((await c('/api/state')).data.state.costs[0].groupId,'g1');
+ }finally{await app.close();}
+});
+
+test('production refuses browser setup even through a localhost HTTPS reverse proxy',async()=>{
+ const app=createApp({dbPath:':memory:',secureCookies:true});await new Promise(r=>app.server.listen(0,'127.0.0.1',r));try{
+  const port=app.server.address().port,res=await fetch(`http://127.0.0.1:${port}/api/setup`,{method:'POST',headers:{Origin:`https://127.0.0.1:${port}`,'Content-Type':'application/json'},body:JSON.stringify({username:'publicadmin',password:password()})});
+  assert.equal(res.status,403);assert.match((await res.json()).error,/admin:init/);assert.equal(app.db.prepare('SELECT COUNT(*) AS n FROM users').get().n,0);
+ }finally{await app.close();}
+});

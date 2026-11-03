@@ -62,3 +62,5 @@ button,.cost-tabs button,nav button{border-radius:6px}.card,.filters{border-radi
 @media(min-width:1600px){main{--page-gutter:45px}}@media(max-width:1150px){main{--page-gutter:20px}}@media(max-width:760px){main{--page-gutter:14px}main>header{height:auto;min-height:49px}.card,.filters{border-radius:8px}.settings-section .master-add>button,#password-form>button{max-width:100%}}
 
 #user-form{display:grid;grid-template-columns:repeat(3,minmax(0,1fr)) minmax(120px,.65fr) auto;gap:18px}#user-form label{min-width:0}#user-form input,#user-form select{min-width:0;width:100%;max-width:none}@media(max-width:1050px){#user-form{grid-template-columns:repeat(2,minmax(0,1fr))}#user-form>button{justify-self:start}}@media(max-width:540px){#user-form{grid-template-columns:minmax(0,1fr)}}
+
+.cost-pagination{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;padding-top:16px;font-size:11px;color:#737985}.cost-pagination>div{display:flex;align-items:center;gap:12px}.cost-pagination button{font-size:11px;padding:7px 12px}

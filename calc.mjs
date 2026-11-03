@@ -47,3 +47,9 @@ export function costWaterfall(current,previous){
  const changes=names.map(name=>({name,delta:sum(now.filter(r=>r.category===name))-sum(old.filter(r=>r.category===name))})).filter(r=>r.delta!==0).sort((a,b)=>Math.abs(b.delta)-Math.abs(a.delta)||a.name.localeCompare(b.name,'ko'));
  let running=start;const steps=changes.map(r=>{const from=running;running+=r.delta;return {...r,from,to:running};});return {start,end,steps};
 }
+
+// Keep numeric negatives usable in spreadsheets; neutralize formulas in untrusted text.
+export function csvCell(value){
+ let text=String(value??'');if(typeof value!=='number'&&/^[\s\u0000-\u001f]*[=+@-]/.test(text))text="'"+text;
+ return '"'+text.replaceAll('"','""')+'"';
+}

@@ -137,3 +137,32 @@ test('count comparison retains other groups when one group has a common total',(
 test('count totals in one month never hide store details from another selected month',()=>{
  assert.equal(countVolume([{recordType:'count',month:'2026-08',center:'A',account:'B2C',quantity:100},{recordType:'count',month:'2026-10',center:'A',account:'B2C',storeId:'s1',quantity:60}]),160);
 });
+
+import {assertNoNewCostDuplicates} from './domain.mjs';
+test('editing historical costs preserves saved group/country and allows inactive references only for the same record',()=>{
+ const original=validateRecord(base,ctx),changed=structuredClone(ctx);changed.groups.push({id:'g2',name:'그룹2'});changed.stores[0].groupId='g2';changed.stores[0].active=false;changed.masters[0].active=false;changed.centerMasters[0].countryCode='VN';
+ const edited=validateRecord({...original,mode:'calculated',memo:'정정 메모'},changed,{previous:original});
+ assert.equal(edited.groupId,'g1');assert.equal(edited.countryCode,'KR');assert.equal(edited.memo,'정정 메모');
+ assert.throws(()=>validateRecord(base,changed),/매장/);
+ changed.stores[0].active=true;changed.masters[0].active=true;
+ const added=validateRecord(base,changed);assert.equal(added.groupId,'g2');assert.equal(added.countryCode,'VN');
+});
+test('new identical costs are blocked across entries and edits while historical duplicates are retained',()=>{
+ const a={...validateRecord(base,ctx),id:'a'},b={...a,id:'b'};
+ assert.throws(()=>assertNoNewCostDuplicates([a,b],[a]),/중복/);
+ assert.doesNotThrow(()=>assertNoNewCostDuplicates([a,b],[a,b]));
+ assert.doesNotThrow(()=>assertNoNewCostDuplicates([a,{...b,memo:'별도 청구 전표 2'}],[a]));
+ assert.throws(()=>assertNoNewCostDuplicates([a,b,{...b,id:'c'}],[a,b]),/중복/);
+});
+test('empty unified imports and extra populated columns fail with actionable messages',()=>{
+ assert.match(validateUnified([],ctx).errors[0],/자료/);
+ const row=unifiedHeaders.map(h=>({'월':'2026-10','비용유형':'물류센터','데이터유형':'비용','센터':'A','업무구분':'B2C','비용항목':'B2C 출고비','값':100}[h]??''));
+ assert.match(validateUnified([unifiedHeaders,[...row,'잘못 붙인 금액']],ctx).errors[0],/추가 열/);
+});
+
+test('maximum cost import validates 2000 decimal lines exactly and rejects 2001 without partial acceptance',()=>{
+ const row=i=>unifiedHeaders.map(h=>({'월':'2026-10','비용유형':'물류센터','데이터유형':'비용','센터':'A','업무구분':'B2C','비용항목':'B2C 출고비','청구단위':'BOX','수량':'1.005','단가':'100','메모':'청구 '+i}[h]??''));
+ const lines=[unifiedHeaders,...Array.from({length:2000},(_,i)=>row(i))],result=validateUnified(lines,ctx);
+ assert.deepEqual(result.errors,[]);assert.equal(result.entries.length,2000);assert.equal(sum(result.entries),202000);
+ const over=validateUnified([...lines,row(2000)],ctx);assert.equal(over.entries.length,0);assert.match(over.errors[0],/2,000/);
+});

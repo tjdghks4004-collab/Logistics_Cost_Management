@@ -45,7 +45,7 @@ function readGrid(sheet,headerRow,width){
  if(sheet.rowCount-headerRow>2000)throw Error('한 번에 최대 2,000행을 지원합니다.');
  const lines=[];
  for(let n=headerRow;n<=sheet.rowCount;n++){
-  const row=[];for(let c=1;c<=width;c++){const cell=sheet.getCell(n,c);if(cell.formula||cell.value?.sharedFormula)throw Error(`${n}행 ${c}열: 수식 대신 값으로 붙여넣으세요.`);if(cell.value instanceof Date)row.push(cell.value.toISOString().slice(0,sheet.getCell(headerRow,c).text.trim()==='환율기준일'?10:7));else row.push(cell.value===null?'':cell.text);}
+  const row=[];sheet.getRow(n).eachCell((cell,c)=>{if(c>width&&String(cell.value??'').trim())throw Error(`${n}행: 양식 밖의 추가 열에 값이 있습니다.`);});for(let c=1;c<=width;c++){const cell=sheet.getCell(n,c);if(n>headerRow&&sheet.getCell(headerRow,c).text.trim()==='매장코드'&&typeof cell.value==='number')throw Error(`${n}행: 매장코드는 앞자리 0을 보존한 텍스트로 입력하세요.`);if(cell.formula||cell.value?.sharedFormula)throw Error(`${n}행 ${c}열: 수식 대신 값으로 붙여넣으세요.`);if(cell.value instanceof Date)row.push(cell.value.toISOString().slice(0,sheet.getCell(headerRow,c).text.trim()==='환율기준일'?10:7));else row.push(cell.value===null?'':cell.text);}
   lines.push(row);
  }
  return lines;

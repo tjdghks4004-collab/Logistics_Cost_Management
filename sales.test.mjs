@@ -21,3 +21,11 @@ test('sales sorting handles numeric amounts/row counts, text codes, dates and st
  const {sortSalesRows}=await import('./sales.mjs'),state=ctx(),rows=[{id:'a',month:'2026-10',storeId:'s1',groupId:'g1',amount:10,sourceRows:100,basis:'상품매출'},{id:'b',month:'2026-11',storeId:'s2',groupId:'g1',amount:2,sourceRows:9,basis:'상품매출'},{id:'c',month:'2026-10',storeId:'s2',groupId:'g1',amount:-5,sourceRows:2,basis:'순매출'}],before=structuredClone(rows);
  assert.deepEqual(sortSalesRows(rows,{key:'amount',direction:'asc'},state).map(r=>r.amount),[-5,2,10]);assert.deepEqual(sortSalesRows(rows,{key:'amount',direction:'desc'},state).map(r=>r.amount),[10,2,-5]);assert.deepEqual(sortSalesRows(rows,{key:'sourceRows',direction:'desc'},state).map(r=>r.sourceRows),[100,9,2]);assert.equal(sortSalesRows(rows,{key:'month',direction:'desc'},state)[0].id,'b');assert.equal(sortSalesRows(rows,{key:'storeCode',direction:'asc'},state)[0].storeId,'s1');assert.deepEqual(sortSalesRows(rows,{key:'storeName',direction:'asc'},state).map(r=>r.id).sort(),['a','b','c']);assert.deepEqual(sortSalesRows(rows,{key:'groupName',direction:'desc'},state),sortSalesRows(rows,{key:'groupName',direction:'desc'},state));assert.deepEqual(rows,before);assert.equal(state.stores[0].code,'0001');
 });
+
+test('50000 ERP detail rows aggregate to monthly store buckets instead of retaining raw rows',()=>{
+ const state=ctx(),lines=[H,...Array.from({length:50000},(_,i)=>['20261101',i%2?'0001':'S2',i%2?'서울점':'부산점',1,i%2?'10.005':'-0.005',0])];
+ const plan=planSalesImport(lines,state);assert.deepEqual(plan.errors,[]);assert.equal(plan.sourceRows,50000);assert.equal(plan.entries.length,2);
+ assert.equal(plan.entries.find(e=>e.storeId==='s1').amount,250125);assert.equal(plan.entries.find(e=>e.storeId==='s2').amount,-125);
+ const saved=applySalesImport(plan,state);assert.equal(saved.sales.length,2);assert.equal(saved.sales.reduce((n,r)=>n+r.sourceRows,0),50000);
+ assert.ok(planSalesImport([...lines,lines[1]],state).errors.length);
+});

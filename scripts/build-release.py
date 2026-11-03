@@ -3,7 +3,7 @@
 from pathlib import Path
 import hashlib,json,zipfile
 ROOT=Path(__file__).resolve().parents[1]
-ROOT_FILES=['.dockerignore','.gitignore','AGENTS.md','README.md','REVIEW.md','START-HERE.md','DEPLOYMENT.md','Dockerfile','compose.yaml','start-scm.cmd','package.json','package-lock.json','index.html','login.html','style.css']
+ROOT_FILES=['.dockerignore','.gitignore','AGENTS.md','README.md','REVIEW.md','START-HERE.md','DEPLOYMENT.md','READINESS-REVIEW.md','Dockerfile','compose.yaml','start-scm.cmd','package.json','package-lock.json','index.html','login.html','style.css']
 files=[ROOT/name for name in ROOT_FILES]+list(ROOT.glob('*.mjs'))
 for folder in ['scripts','deploy']:
     files.extend(p for p in (ROOT/folder).rglob('*') if p.is_file() and '__pycache__' not in p.parts and p.suffix not in ['.pyc'])

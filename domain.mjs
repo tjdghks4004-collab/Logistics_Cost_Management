@@ -12,15 +12,15 @@ export const currencyHeaders=[...groupedHeaders,'통화','외화금액','적용�
 export const unifiedHeaders=[...currencyHeaders,'컨테이너타입'];
 export const domainLabels={center:'물류센터',trade:'수출입',common:'공통'};
 export const countCategories=['B2C 출고 건수','B2B 출고 건수'];
-export function validateRecord(raw,ctx){
+export function validateRecord(raw,ctx,{previous=null}={}){
  const r={...raw},fail=s=>{throw Error(s);};
  if(!/^\d{4}-(0[1-9]|1[0-2])$/.test(r.month))fail('월은 YYYY-MM로 입력하세요.');
  if(!['center','trade','common'].includes(r.domain))fail('비용유형을 확인하세요.');
  if(!['cost','count'].includes(r.recordType))fail('데이터유형을 확인하세요.');
  if(r.mode==='fx'&&(r.domain!=='trade'||r.recordType!=='cost'))fail('외화 입력은 수출입 비용에서 사용하세요.');
  if(!['B2C','B2B','공통'].includes(r.account))fail('업무구분은 B2C/B2B/공통입니다.');
- const center=ctx.centerMasters.find(c=>c.name===r.center);
- if(r.domain==='center'){if(!center)fail('등록된 물류센터를 선택하세요.');r.countryCode=center.countryCode;}
+ const center=ctx.centerMasters.find(c=>c.name===r.center),sameStore=previous&&previous.storeId===r.storeId;
+ if(r.domain==='center'){if(!center)fail('등록된 물류센터를 선택하세요.');r.countryCode=previous?.domain==='center'&&previous.center===r.center&&previous.countryCode?previous.countryCode:center.countryCode;}
  else {r.center='';if(!ctx.countries.some(c=>c.code===r.countryCode))fail('등록된 국가를 선택하세요.');}
  if(r.domain==='trade'){
   for(const [field,label] of [['ciplNo','CIPL NO.'],['internalNo','내부 관리번호'],['namedPlace','지정 장소·항구']]){
@@ -39,7 +39,7 @@ export function validateRecord(raw,ctx){
   if(![r.origin,r.destination].every(code=>ctx.countries.some(c=>c.code===code)))fail('출발국과 도착국을 기준정보에 등록하세요.');
  }else {r.shipment='';r.direction='';r.origin='';r.destination='';r.incoterm='';r.cargoType='';r.ciplNo='';r.internalNo='';r.chargeGroup='';r.namedPlace='';r.containerType='';}
  if(r.recordType==='count'&&r.domain!=='center')fail('출고 건수는 물류센터에서 입력하세요.');
- if(r.storeId){const s=ctx.stores.find(s=>s.id===r.storeId&&s.active);if(!s)fail('등록된 사용 중 매장을 선택하세요.');r.groupId=s.groupId;}
+ if(r.storeId){const s=ctx.stores.find(s=>s.id===r.storeId&&(s.active||sameStore));if(!s)fail('등록된 사용 중 매장을 선택하세요.');r.groupId=sameStore?previous.groupId:s.groupId;}
  else {r.storeId='';r.groupId=r.groupId||'';if(r.groupId&&!ctx.groups.some(g=>g.id===r.groupId))fail('관리그룹을 확인하세요.');}
  if(r.recordType==='count'){
   if(!['B2C','B2B'].includes(r.account))fail('출고 건수는 B2C 또는 B2B를 선택하세요.');
@@ -47,7 +47,7 @@ export function validateRecord(raw,ctx){
   if(!/^\d+$/.test(String(r.quantity))||Number(r.quantity)>1e12)fail('건수는 0 이상 1조 이하 정수로 입력하세요.');
   r.quantity=Number(r.quantity);r.amount=0;
  }else {
-  if(!ctx.masters.some(m=>m.name===r.category&&m.active))fail('사용 중인 비용항목을 선택하세요.');
+  if(!ctx.masters.some(m=>m.name===r.category&&(m.active||previous?.category===r.category)))fail('사용 중인 비용항목을 선택하세요.');
   if(r.mode==='fx'){
    if(r.domain!=='trade')fail('외화 입력은 수출입 비용에서 사용하세요.');
    if(!currencies.includes(r.currency))fail('외화 통화를 선택하세요.');
@@ -71,12 +71,14 @@ export function validateRecord(raw,ctx){
 export function fingerprint(r){return JSON.stringify(['month','domain','recordType','countryCode','center','shipment','direction','origin','destination','account','storeId','groupId','category','unit','quantity','price','amount','memo','incoterm','cargoType','ciplNo','internalNo','chargeGroup','namedPlace','currency','foreignAmount','exchangeRate','rateBasis','rateDate','containerType'].map(k=>k==='currency'?(r[k]||'KRW'):k==='rateBasis'?(r[k]||1):r[k]??''));}
 export function validateUnified(lines,ctx){
  if(lines.length>2001)return {entries:[],errors:['한 번에 2,000행 이하로 업로드하세요.']};
+ if(!Array.isArray(lines[0]))return {entries:[],errors:['입력된 자료가 없습니다. 양식에 자료를 작성하세요.']};
  const headers=lines[0].map(v=>String(v).trim()),isUnified=[unifiedHeaders.join(','),currencyHeaders.join(','),groupedHeaders.join(','),documentHeaders.join(','),tradeMetadataHeaders.join(','),legacyUnifiedHeaders.join(',')].includes(headers.join(',')),legacy=headers.includes('값')&&headers.includes('구분2')&&(headers.includes('년/월')||headers.includes('월'));
  if(!isUnified&&!legacy)return null;
  const entries=[],errors=[];
  for(let i=1;i<lines.length;i++){
   if(!lines[i].some(v=>String(v??'').trim()))continue;
   try{
+   if(lines[i].slice(headers.length).some(v=>String(v??'').trim()))throw Error('양식 밖의 추가 열에 값이 있습니다. 열 위치를 확인하세요.');
    const d=Object.fromEntries(headers.map((h,j)=>[h,String(lines[i][j]??'').trim()]));
    const storeCode=d.매장코드||d.매장||'',store=ctx.stores.find(s=>s.code?.toUpperCase()===storeCode.toUpperCase()&&s.active);
    if(storeCode&&!['센터 공통','공통'].includes(storeCode)&&!store)throw Error('매장코드를 마스터에 먼저 등록하세요.');
@@ -177,3 +179,9 @@ export function defaultCategoryParent(name){
 }
 export function categoryParentOf(name,masters){return masters.find(m=>m.name===name)?.parentCategory||defaultCategoryParent(name);}
 export function validParentCategory(value){return typeof value==='string'&&value.trim()===value&&value.length>0&&value.length<=40&&value!=='all';}
+
+// Existing historical duplicates may be retained or removed; new duplicates cannot be added.
+export function assertNoNewCostDuplicates(costs,previous=[]){
+ const old=new Map(),seen=new Map();for(const r of previous){const key=fingerprint(r);old.set(key,(old.get(key)||0)+1);}
+ for(let i=0;i<costs.length;i++){const key=fingerprint(costs[i]),count=(seen.get(key)||0)+1;seen.set(key,count);if(count>Math.max(1,old.get(key)||0))throw Error(`${i+1}번째 비용·건수 내역이 중복됩니다. 실제 다른 청구라면 문서번호 또는 메모로 구분하세요.`);}
+}

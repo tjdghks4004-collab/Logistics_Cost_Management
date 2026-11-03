@@ -327,6 +327,19 @@ rows.forEach((row,i)=>sheet.getRow(i+2).values=headers.map(h=>row[h]??''));await
             screenshot=os.environ.get('REVIEW_SCREENSHOT')
             if screenshot:page.screenshot(path=screenshot,full_page=True)
             page.set_viewport_size({'width':390,'height':844});assert page.evaluate('document.documentElement.scrollWidth')<=390,page.evaluate("[...document.querySelectorAll('body *')].filter(e=>e.getBoundingClientRect().right>391&&e.getBoundingClientRect().width>0&&!(()=>{for(let p=e.parentElement;p&&p!==document.body;p=p.parentElement)if(['hidden','auto','scroll'].includes(getComputedStyle(p).overflowX))return true;return false})()).map(e=>[e.tagName,e.className,e.getBoundingClientRect().right]).slice(0,20)")
+            # High-row-count lists stay bounded; searches and exports still cover the complete scope.
+            page.set_viewport_size({'width':1440,'height':1050})
+            page.evaluate("""()=>{const key='scm-logistics-review-v1',s=JSON.parse(localStorage.getItem(key)),base=s.costs.find(r=>r.domain==='center'&&r.recordType==='cost');s.costs=Array.from({length:2000},(_,i)=>({...base,id:'bulk-'+i,month:'2026-10',memo:'BULK-'+String(i).padStart(5,'0')}));s.costs[0].id='bulk-0\"><img src=x onerror=window.__costXss=1>';s.sales=[];s.activity=[];localStorage.setItem(key,JSON.stringify(s));}""")
+            page.reload();page.wait_for_selector('.kpi');page.click('[data-view=costs]')
+            assert page.locator('#cost-records-table tbody tr').count()==100
+            assert page.locator('#cost-count').inner_text()=='2000건'
+            assert page.locator('#cost-list img').count()==0 and page.evaluate('window.__costXss===undefined')
+            page.click('[data-cost-page="1"]');assert 'BULK-00100' in page.locator('#cost-records-table').inner_text()
+            page.fill('#cost-query','BULK-01999');assert page.locator('#cost-records-table tbody tr').count()==1
+            assert 'BULK-01999' in page.locator('#cost-records-table').inner_text()
+            page.click('#cost-search-reset');assert page.locator('#cost-records-table tbody tr').count()==100
+            with page.expect_download() as large_export:page.click('#export')
+            with Path(large_export.value.path()).open(encoding='utf-8-sig',newline='') as f:assert len(list(csv.DictReader(f)))==2000
             assert not errors,errors
             assert all(url.startswith(origin) or url.startswith('blob:') for url in requests),requests
             browser.close()

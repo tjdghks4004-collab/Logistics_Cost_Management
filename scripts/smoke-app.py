@@ -44,6 +44,13 @@ def main():
             page.fill('[data-u=quantity]','100');page.fill('[data-u=price]','500');page.click('#unified-add')
             page.select_option('[data-unified-row="1"] [data-u=recordType]','count');page.select_option('[data-unified-row="1"] [data-u=storeId]',store);page.fill('[data-unified-row="1"] [data-u=quantity]','100')
             page.click('#unified-entry button[type=submit]');page.wait_for_selector('[data-edit]');assert len(workspace()['costs'])==2
+            # The manual path must enforce the same duplicate rule as file imports.
+            page.click('[data-view=entry]');page.fill('#unified-entry [name=month]','2026-10')
+            page.select_option('[data-u=storeId]',store);page.select_option('[data-u=category]','B2C 출고비')
+            page.fill('[data-u=quantity]','100');page.fill('[data-u=price]','500')
+            assert page.evaluate("()=>{const e=new Event('beforeunload',{cancelable:true});window.dispatchEvent(e);return e.defaultPrevented}")
+            page.click('#unified-entry button[type=submit]');assert '중복' in page.locator('#unified-error').inner_text();assert len(workspace()['costs'])==2
+            page.fill('[data-u=quantity]','');page.fill('[data-u=price]','')
             page.reload();page.wait_for_selector('.kpi');assert page.locator('.kpi .value').first.inner_text()=='₩50,000'
             assert page.locator('.kpi .value').nth(1).inner_text()=='₩500/건'
             # Download and import a real XLSX through the server-backed app.
@@ -79,6 +86,12 @@ def main():
             page.wait_for_function("async()=>((await (await fetch('/api/state')).json()).state.stores.length===2)")
             after_bulk=workspace();assert after_bulk['stores'][0]['id']==old_store_id;assert after_bulk['stores'][0]['name']=='검증매장 개정';assert after_bulk['stores'][1]['code']=='0002';assert after_bulk['stores'][1]['active'] is False
             assert after_bulk['costs']==old_costs;assert len(after_bulk['groups'])==2
+            # Editing a historical memo must not recategorize the old charge to the new group.
+            page.click('[data-view=costs]');page.locator('[data-edit]').first.click()
+            page.fill('#record-edit [name=memo]','과거 비용 정정 메모');page.click('#record-edit button[type=submit]')
+            page.wait_for_selector('#record-edit',state='detached')
+            edited=workspace()['costs'][0];assert edited['groupId']==old_costs[0]['groupId'];assert edited['memo']=='과거 비용 정정 메모'
+
             page.reload();page.wait_for_selector('.kpi');assert workspace()['stores']==after_bulk['stores']
             # Preserve legacy metrics/notes while replacing only the visible workflow.
             page.evaluate("""async()=>{const me=await (await fetch('/api/me')).json(),doc=await (await fetch('/api/state')).json();doc.state.activity=[{month:'2026-10',center:'검증센터',countryCode:'KR',volume:999,sales:999999}];doc.state.notes=[{month:'2026-10',reason:'기존 기록',plan:'보존',owner:'SCM'}];const res=await fetch('/api/state',{method:'PUT',headers:{'Content-Type':'application/json','X-CSRF-Token':me.csrf},body:JSON.stringify({revision:doc.revision,state:doc.state})});if(!res.ok)throw Error('legacy fixture failed');}""")

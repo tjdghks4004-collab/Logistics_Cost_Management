@@ -6,7 +6,7 @@ import {randomBytes,scryptSync,timingSafeEqual,createHash} from 'node:crypto';
 import {mkdirSync,readFileSync,chmodSync} from 'node:fs';
 import {resolve,dirname,extname} from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {validateRecord,validParentCategory} from './domain.mjs';
+import {validateRecord,validParentCategory,assertNoNewCostDuplicates} from './domain.mjs';
 const root=dirname(fileURLToPath(import.meta.url)),roles=['admin','editor','viewer'];
 const err=(status,message)=>Object.assign(Error(message),{status});
 const digest=s=>createHash('sha256').update(s).digest('hex');
@@ -34,17 +34,19 @@ function validateState(next,previous=null,restore=false){
   if(r.recordType==='count'&&(r.amount!==0||!Number.isSafeInteger(r.quantity)||r.quantity<0))throw err(400,'건수는 정수이며 금액은 0이어야 합니다.');
   if(previous&&JSON.stringify(old.get(r.id))===JSON.stringify(r))continue;
   try{
-   const checked=validateRecord({...r,mode:r.currency&&r.currency!=='KRW'?'fx':r.quantity==null||r.price==null?'amount':'calculated'},ctx);
+   const checked=validateRecord({...r,mode:r.currency&&r.currency!=='KRW'?'fx':r.quantity==null||r.price==null?'amount':'calculated'},ctx,{previous:restore?null:old.get(r.id)});
    if((r.incoterm||'')!==checked.incoterm||(r.cargoType||'')!==checked.cargoType)throw Error('수출입 부가정보는 지원되는 대문자 코드로 입력하세요.');
    if((r.ciplNo||'')!==checked.ciplNo||(r.internalNo||'')!==checked.internalNo)throw Error('CIPL NO.와 내부 관리번호의 앞뒤 공백을 제거하세요.');
    if((r.chargeGroup||'')!==checked.chargeGroup||(r.namedPlace||'')!==checked.namedPlace)throw Error('비용 그룹 또는 지정 장소를 확인하세요.');
    if((r.containerType||'')!==checked.containerType)throw Error('컨테이너 타입을 확인하세요.');
    if(checked.amount!==r.amount)throw Error('수량·단가 또는 외화·환율의 계산 결과와 금액이 일치하지 않습니다.');
+   if(!restore&&((r.groupId||'')!==(checked.groupId||'')||(r.countryCode||'')!==(checked.countryCode||'')))throw Error('매장·센터의 소속과 국가 연결을 확인하세요. 과거 내역은 당시 소속을 유지합니다.');
    // Restoring a historical snapshot must preserve its original group/country.
    if(r.groupId&&!group(r.groupId))throw Error('관리그룹이 없습니다.');
    if(r.countryCode&&!country(r.countryCode))throw Error('국가가 없습니다.');
   }catch(e){throw err(400,e.message);}
  }
+ if(!restore)try{assertNoNewCostDuplicates(next.costs,previous?.costs||[]);}catch(e){throw err(400,e.message);}
  for(const r of next.activity)if(!/^\d{4}-(0[1-9]|1[0-2])$/.test(r.month)||!next.centerMasters.some(c=>c.name===r.center)||!['volume','sales'].every(k=>Number.isSafeInteger(r[k])&&r[k]>=0&&r[k]<=1e12))throw err(400,'물동량·매출 값을 확인하세요.');
  for(const r of next.notes)if(!text(r.reason,1000)||!text(r.plan,1000)||!text(r.owner)||!/^\d{4}-(0[1-9]|1[0-2])$/.test(r.month))throw err(400,'사유·조치 계획 값을 확인하세요.');
  return next;
@@ -80,6 +82,7 @@ export function createApp({dbPath=process.env.LOGISTICS_DB_PATH||resolve(root,'d
     if(mutating){if(req.headers.origin!==`${secureCookies?'https':'http'}://${req.headers.host}`)throw err(403,'같은 사이트에서 요청하세요.');if(!req.headers['content-type']?.startsWith('application/json'))throw err(415,'JSON 요청이 필요합니다.');}
     if(path==='/api/status'&&req.method==='GET')return json(200,{setupRequired:!db.prepare('SELECT id FROM users LIMIT 1').get()});
     if(path==='/api/setup'&&req.method==='POST'){
+     if(secureCookies)throw err(403,'공개 서버의 최초 관리자는 서버 터미널에서 npm run admin:init으로 등록하세요.');
      if(db.prepare('SELECT id FROM users LIMIT 1').get())throw err(409,'초기 설정이 이미 완료되었습니다.');
      if(!['127.0.0.1','::1','::ffff:127.0.0.1'].includes(req.socket.remoteAddress))throw err(403,'최초 관리자 등록은 서버의 로컬 접속에서 진행하세요.');
      const d=await readBody(req);credentials(d);if(db.prepare('SELECT id FROM users LIMIT 1').get())throw err(409,'초기 설정이 이미 완료되었습니다.');db.prepare('INSERT INTO users(username,name,password_hash,role) VALUES(?,?,?,?)').run(d.username,d.name?.slice(0,80)||d.username,hashPassword(d.password),'admin');audit(d.username,'setup',{});return json(201,{ok:true});

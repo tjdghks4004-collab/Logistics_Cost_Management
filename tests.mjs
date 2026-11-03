@@ -22,3 +22,10 @@ test('waterfall reconciles cost deltas, including new/removed categories and exc
  const {costWaterfall}=await import('./calc.mjs');const old=[{category:'A',amount:100},{category:'B',amount:50}],now=[{category:'A',amount:80},{category:'C',amount:120},{category:'count',recordType:'count',amount:999}];const result=costWaterfall(now,old);
  assert.equal(result.start,150);assert.equal(result.end,200);assert.equal(result.steps.reduce((n,s)=>n+s.delta,result.start),result.end);assert.equal(result.steps.at(-1).to,200);assert.deepEqual(result.steps.map(s=>s.delta).sort((a,b)=>a-b),[-50,-20,120]);assert.equal(costWaterfall(old,old).steps.length,0);
 });
+
+import {csvCell} from './calc.mjs';
+test('CSV exports numeric refunds as numbers and neutralizes text formulas including leading whitespace',()=>{
+ assert.equal(csvCell(-1234),'"-1234"');assert.equal(csvCell(0),'"0"');
+ for(const value of ['=1+1','  =1+1','\t@SUM(A1)','\r+1+1','-external'])assert.ok(csvCell(value).startsWith('"\''));
+ assert.equal(csvCell('메모 "검증"'),'"메모 ""검증"""');
+});
