@@ -55,6 +55,23 @@ def main():
             page.set_input_files('#file',str(filled));page.wait_for_selector('#commit-import');page.click('#commit-import')
             page.wait_for_function("async()=>((await (await fetch('/api/state')).json()).state.costs.length===3)")
             page.click('[data-view=dashboard]');assert page.locator('.kpi .value').first.inner_text()=='₩52,000'
+            # Store master XLSX: preview errors, explicit new-group opt-in, then one atomic save.
+            before_bulk=workspace();old_store_id=before_bulk['stores'][0]['id'];old_costs=before_bulk['costs']
+            page.click('[data-view=stores]');assert page.locator('#add').is_hidden()
+            with page.expect_download() as download:page.click('#store-template')
+            store_template=Path(tmp)/'stores.xlsx';store_filled=Path(tmp)/'stores-filled.xlsx';download.value.save_as(str(store_template))
+            store_generator="""import ExcelJS from 'exceljs';const book=new ExcelJS.Workbook();await book.xlsx.readFile(process.argv[1]);const sheet=book.getWorksheet('매장 마스터 입력');sheet.getRow(2).values=['SCM001','검증매장 개정','해외 관리그룹','사용'];sheet.getRow(3).values=['0002','추가매장','해외 관리그룹','사용 제외'];await book.xlsx.writeFile(process.argv[2]);"""
+            subprocess.run(['node','--input-type=module','-e',store_generator,str(store_template),str(store_filled)],cwd=ROOT,check=True,capture_output=True,text=True)
+            page.set_input_files('#store-file',str(store_filled));page.wait_for_selector('#store-import-save')
+            assert page.locator('#store-import-save').is_disabled();assert '미등록 관리그룹' in page.locator('#store-import-preview').inner_text()
+            assert workspace()['stores']==before_bulk['stores']
+            page.check('#store-new-groups');assert page.locator('#store-import-save').is_enabled()
+            assert '함께 생성할 관리그룹' in page.locator('#store-import-preview').inner_text()
+            page.click('#store-import-save')
+            page.wait_for_function("async()=>((await (await fetch('/api/state')).json()).state.stores.length===2)")
+            after_bulk=workspace();assert after_bulk['stores'][0]['id']==old_store_id;assert after_bulk['stores'][0]['name']=='검증매장 개정';assert after_bulk['stores'][1]['code']=='0002';assert after_bulk['stores'][1]['active'] is False
+            assert after_bulk['costs']==old_costs;assert len(after_bulk['groups'])==2
+            page.reload();page.wait_for_selector('.kpi');assert workspace()['stores']==after_bulk['stores']
             # Create the remaining two SCM users through the authenticated admin UI.
             page.click('[data-view=settings]')
             for username,role in [('scm_editor','editor'),('scm_viewer','viewer')]:
@@ -71,7 +88,7 @@ def main():
             assert page.locator('[data-view=entry]').is_hidden() and page.locator('#add').is_hidden()
             assert page.evaluate("async()=>(await fetch('/api/backup')).status")==403
             assert not errors,errors
-            print('PASS: actual login + empty setup + masters + costs/counts + real XLSX upload + SQLite persistence/restart + 3 users + viewer permissions + backup; no production data touched')
+            print('PASS: actual login + empty setup + masters + costs/counts + real XLSX upload + bulk store master preview/upsert + SQLite persistence/restart + 3 users + viewer permissions + backup; no production data touched')
         finally:
             browser.close();stop(server)
 
