@@ -17,11 +17,11 @@ export function planSalesImport(lines,ctx,{basis='상품매출',fileName=''}={})
  if(lines.length-h-1>50000){plan.errors.push('한 번에 최대 50,000행을 지원합니다.');return plan;}
  const headers=lines[h].map(v=>String(v??'').trim()),idx=key=>headers.indexOf(key);
  if(['매출일자','매장코드',basis].some(key=>headers.filter(v=>v===key).length!==1)){plan.errors.push('필수 열이 중복되었습니다.');return plan;}
- const sums=new Map();
+ const sums=new Map(),nameMismatches=new Map();
  for(let i=h+1;i<lines.length;i++){
   const row=lines[i];if(!row.some(v=>String(v??'').trim()))continue;
   try{const date=salesDate(row[idx('매출일자')]),code=String(row[idx('매장코드')]??'').trim().toUpperCase(),store=ctx.stores.find(s=>s.code.toUpperCase()===code);if(!store)throw Error('미등록 매장코드: '+(code||'(빈 값)'));
-   const name=idx('매장명')<0?'':String(row[idx('매장명')]??'').trim();if(name&&name!==store.name)throw Error('매장코드와 매장명이 다릅니다: '+code+' / '+name);
+   const name=idx('매장명')<0?'':String(row[idx('매장명')]??'').trim();if(name&&name!==store.name){const mismatch=nameMismatches.get(code)||{code,erpName:name,masterName:store.name,rows:0};mismatch.rows++;nameMismatches.set(code,mismatch);}
    const amount=salesScaled(row[idx(basis)]),month=date.slice(0,7),key=month+'|'+store.id,existing=(ctx.sales||[]).find(r=>r.month===month&&r.storeId===store.id);
    const entry=sums.get(key)||{month,storeId:store.id,groupId:existing?.groupId??store.groupId,scaled:0n,sourceRows:0,existing};entry.scaled+=amount;entry.sourceRows++;sums.set(key,entry);plan.sourceRows++;
   }catch(error){if(plan.errors.length<100)plan.errors.push(`${i+1}행: ${error.message}`);}
@@ -34,6 +34,7 @@ export function planSalesImport(lines,ctx,{basis='상품매출',fileName=''}={})
  }
  if(!plan.entries.length&&!plan.errors.length)plan.errors.push('집계할 매출 자료가 없습니다.');
  if(plan.entries.some(e=>e.previousAmount!==null))plan.warnings.push('기존 월·매장 매출은 이 파일의 합계로 교체합니다. 해당 월·매장의 전체 자료를 업로드하세요.');
+ plan.nameMismatches=[...nameMismatches.values()];for(const mismatch of plan.nameMismatches.slice(0,20))plan.warnings.push(`매장명 차이 (등록 가능): ${mismatch.code} · ERP ‘${mismatch.erpName}’ → 마스터 ‘${mismatch.masterName}’ (${mismatch.rows}행). 매장코드로 연결하며 마스터 이름은 변경하지 않습니다.`);if(plan.nameMismatches.length>20)plan.warnings.push(`그 외 ${plan.nameMismatches.length-20}개 매장도 이름 차이가 있습니다. 모두 코드로 연결합니다.`);
  plan.warnings.push('매출 원장 행은 삭제·중복 제거하지 않고 합산합니다. 동일 금액의 정상 거래를 구분할 전표번호가 없으므로 ERP에서 중복 없는 원장을 내려받으세요.');
  return plan;
 }
@@ -55,7 +56,7 @@ export function salesWorkbookLines(wb,basis='상품매출'){
 }
 export async function buildSalesTemplate(ExcelJS){
  const wb=new ExcelJS.Workbook(),guide=wb.addWorksheet('작성 안내');guide.columns=[{width:24},{width:100}];
- for(const row of [['ERP 매출 업로드','ERP 원장의 매출일자·매장코드·매장명·상품매출 열을 그대로 읽습니다. 기본 금액 열은 상품매출입니다. 순매출·총매출로 변경할 수 있습니다.'],['집계 기준','월·매장별 합계. 반품 등 음수 매출을 포함하며 소수 금액은 월별 합산 후 원 단위 반올림합니다.'],['출고 건수와 구분','판매수량은 출고 건수가 아닙니다. 판매수량은 출고 KPI에 반영하지 않습니다.'],['재업로드','월·매장별 기존 금액을 교체합니다. 파일에 없는 월·매장은 유지합니다. 재업로드할 월·매장의 전체 자료를 사용하세요.'],['센터 배분 없음','매출은 센터·국가·업무에 임의 배분하지 않습니다. 이 필터를 좁히면 해당 ERP 매출을 분모로 하는 물류비율은 계산하지 않습니다.']])guide.addRow(row);
+ for(const row of [['ERP 매출 업로드','ERP 원장의 매출일자·매장코드·상품매출을 읽습니다. 매장명은 참고용이며 코드가 일치하면 이름이 달라도 등록됩니다. 표시는 매장 마스터 이름을 사용합니다. 기본 금액 열은 상품매출입니다. 순매출·총매출로 변경할 수 있습니다.'],['집계 기준','월·매장별 합계. 반품 등 음수 매출을 포함하며 소수 금액은 월별 합산 후 원 단위 반올림합니다.'],['출고 건수와 구분','판매수량은 출고 건수가 아닙니다. 판매수량은 출고 KPI에 반영하지 않습니다.'],['재업로드','월·매장별 기존 금액을 교체합니다. 파일에 없는 월·매장은 유지합니다. 재업로드할 월·매장의 전체 자료를 사용하세요.'],['센터 배분 없음','매출은 센터·국가·업무에 임의 배분하지 않습니다. 이 필터를 좁히면 해당 ERP 매출을 분모로 하는 물류비율은 계산하지 않습니다.']])guide.addRow(row);
  guide.eachRow(r=>{r.height=45;r.alignment={wrapText:true,vertical:'middle'};});const sheet=wb.addWorksheet('매출 입력');sheet.columns=['매출일자','매장코드','매장명','상품매출'].map(header=>({header,width:25}));sheet.getColumn(1).numFmt='@';sheet.getColumn(2).numFmt='@';sheet.views=[{state:'frozen',ySplit:1}];return wb;
 }
 

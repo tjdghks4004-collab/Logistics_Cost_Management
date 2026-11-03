@@ -83,12 +83,12 @@ def main():
             assert page.locator('#center').evaluate('el=>el.closest("label").hidden')
             with page.expect_download() as download:page.click('#sales-template')
             sales_template=Path(tmp)/'sales-template.xlsx';sales_filled=Path(tmp)/'erp-sales.xlsx';download.value.save_as(str(sales_template))
-            sales_generator="""import ExcelJS from 'exceljs';const book=new ExcelJS.Workbook();await book.xlsx.readFile(process.argv[1]);const s=book.getWorksheet('매출 입력');s.getCell('E1').value='판매수량';s.getRow(2).values=['20261001','SCM001','검증매장 개정',1000000,5000];s.getRow(3).values=['20261002','SCM001','검증매장 개정',-100000,-500];s.getRow(4).values=['20261003','0002','추가매장',100000,800];s.getRow(5).values=['20261101','SCM001','검증매장 개정',200000,200];await book.xlsx.writeFile(process.argv[2]);"""
+            sales_generator="""import ExcelJS from 'exceljs';const book=new ExcelJS.Workbook();await book.xlsx.readFile(process.argv[1]);const s=book.getWorksheet('매출 입력');s.getCell('E1').value='판매수량';s.getRow(2).values=['20261001','SCM001','ERP의 다른 매장명',1000000,5000];s.getRow(3).values=['20261002','SCM001','검증매장 개정',-100000,-500];s.getRow(4).values=['20261003','0002','추가매장',100000,800];s.getRow(5).values=['20261101','SCM001','검증매장 개정',200000,200];await book.xlsx.writeFile(process.argv[2]);"""
             subprocess.run(['node','--input-type=module','-e',sales_generator,str(sales_template),str(sales_filled)],cwd=ROOT,check=True,capture_output=True,text=True)
-            page.set_input_files('#sales-file',str(sales_filled));page.wait_for_selector('#sales-save');assert page.locator('#sales-save').is_disabled();assert not workspace().get('sales')
+            page.set_input_files('#sales-file',str(sales_filled));page.wait_for_selector('#sales-save');assert page.locator('#sales-save').is_disabled();assert not workspace().get('sales');assert '매장명 차이 (등록 가능)' in page.locator('#sales-preview').inner_text()
             page.check('#sales-confirm');page.click('#sales-save')
             page.wait_for_function("async()=>((await (await fetch('/api/state')).json()).state.sales?.length===3)")
-            sales_before=workspace()['sales'];assert page.locator('#sales-total').inner_text()=='₩1,000,000'
+            sales_before=workspace()['sales'];assert workspace()['stores'][0]['name']=='검증매장 개정';assert page.locator('[data-sales-id]').filter(has_text='검증매장 개정').count()>0;assert page.locator('#sales-total').inner_text()=='₩1,000,000'
             assert workspace()['activity'][0]['volume']==999 and len(workspace()['notes'])==1
             page.set_input_files('#sales-file',str(sales_filled));page.wait_for_selector('#sales-save');page.check('#sales-confirm');assert page.locator('#sales-save').is_disabled();assert workspace()['sales']==sales_before
             page.click('#sales-cancel');page.click('[data-view=dashboard]')
