@@ -40,13 +40,13 @@ def main():
             page.wait_for_selector('[data-store-record]');store=workspace()['stores'][0]['id']
             page.click('[data-view=entry]')
             page.fill('#unified-entry [name=month]','2026-10')
-            page.select_option('[data-u=storeId]',store);page.select_option('[data-u=category]','B2C 출고비')
+            page.fill('[data-store-search]','SCM001');page.press('[data-store-search]','Tab');page.select_option('[data-u=category]','B2C 출고비')
             page.fill('[data-u=quantity]','100');page.fill('[data-u=price]','500');page.click('#unified-add')
-            page.select_option('[data-unified-row="1"] [data-u=recordType]','count');page.select_option('[data-unified-row="1"] [data-u=storeId]',store);page.fill('[data-unified-row="1"] [data-u=quantity]','100')
+            page.select_option('[data-unified-row="1"] [data-u=recordType]','count');page.fill('[data-unified-row="1"] [data-store-search]','검증매장');page.press('[data-unified-row="1"] [data-store-search]','Tab');page.fill('[data-unified-row="1"] [data-u=quantity]','100')
             page.click('#unified-entry button[type=submit]');page.wait_for_selector('[data-edit]');assert len(workspace()['costs'])==2
             # The manual path must enforce the same duplicate rule as file imports.
             page.click('[data-view=entry]');page.fill('#unified-entry [name=month]','2026-10')
-            page.select_option('[data-u=storeId]',store);page.select_option('[data-u=category]','B2C 출고비')
+            page.fill('[data-store-search]','SCM001');page.press('[data-store-search]','Tab');page.select_option('[data-u=category]','B2C 출고비')
             page.fill('[data-u=quantity]','100');page.fill('[data-u=price]','500')
             assert page.evaluate("()=>{const e=new Event('beforeunload',{cancelable:true});window.dispatchEvent(e);return e.defaultPrevented}")
             page.click('#unified-entry button[type=submit]');assert '중복' in page.locator('#unified-error').inner_text();assert len(workspace()['costs'])==2

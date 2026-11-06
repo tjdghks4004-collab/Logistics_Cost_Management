@@ -67,7 +67,7 @@ export function validateRecord(raw,ctx,{previous=null}={}){
  }
  if(r.mode!=='fx'){r.currency='KRW';r.foreignAmount='';r.exchangeRate='';r.rateBasis=1;r.rateDate='';}
  r.memo=String(r.memo||'').trim();if(r.memo.length>500)fail('메모는 500자 이하입니다.');
- delete r.mode;delete r.autoRecommended;delete r.manualEntry;return r;
+ delete r.mode;delete r.storeQuery;delete r.autoRecommended;delete r.manualEntry;return r;
 }
 export function fingerprint(r){return JSON.stringify(['month','domain','recordType','countryCode','center','shipment','direction','origin','destination','account','storeId','groupId','category','unit','quantity','price','amount','memo','incoterm','cargoType','ciplNo','internalNo','chargeGroup','namedPlace','currency','foreignAmount','exchangeRate','rateBasis','rateDate','containerType','material'].map(k=>k==='currency'?(r[k]||'KRW'):k==='rateBasis'?(r[k]||1):r[k]??''));}
 export function validateUnified(lines,ctx){
