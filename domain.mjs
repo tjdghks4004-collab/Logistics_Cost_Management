@@ -1,5 +1,5 @@
 import {searchIncludes} from './search.mjs';
-import {preferScopeTotals,lineAmount,convertForeignAmount} from './calc.mjs';
+import {preferScopeTotals,lineAmount,convertForeignAmount,reverseUnitPrice} from './calc.mjs';
 export const incoterms=['EXW','FCA','CPT','CIP','DAP','DPU','DDP','FAS','FOB','CFR','CIF'];
 export const cargoTypes=['LCL','FCL','AIR'];
 export const containerTypes={DRY:'일반 (DRY)',HC:'하이큐빅 (HC)',REEFER:'냉장·냉동 (REEFER)',OT:'오픈톱 (OT)',FR:'플랫랙 (FR)',TANK:'탱크 (TANK)',OTHER:'기타'};
@@ -15,6 +15,8 @@ export const domainLabels={center:'물류센터',trade:'수출입',common:'공�
 export const countCategories=['B2C 출고 건수','B2B 출고 건수'];
 export function validateRecord(raw,ctx,{previous=null}={}){
  const r={...raw},fail=s=>{throw Error(s);};
+ if(r.mode!=='reverse')delete r.calculation;
+ if(r.mode==='reverse'&&r.recordType!=='cost')fail('단가 역산은 비용 입력에서 사용하세요.');
  if(!/^\d{4}-(0[1-9]|1[0-2])$/.test(r.month))fail('월은 YYYY-MM로 입력하세요.');
  if(!['center','trade','common'].includes(r.domain))fail('비용유형을 확인하세요.');
  if(!['cost','count'].includes(r.recordType))fail('데이터유형을 확인하세요.');
@@ -58,6 +60,9 @@ export function validateRecord(raw,ctx,{previous=null}={}){
    r.rateDate=String(r.rateDate||'');
    if(r.rateDate&&(!/^\d{4}-\d{2}-\d{2}$/.test(r.rateDate)||!Number.isFinite(Date.parse(r.rateDate+'T00:00:00Z'))||new Date(r.rateDate+'T00:00:00Z').toISOString().slice(0,10)!==r.rateDate))fail('환율 기준일을 확인하세요.');
    r.quantity=null;r.price=null;r.unit='원';
+  }else if(r.mode==='reverse'){
+   if(!ctx.units.includes(r.unit))fail('청구 단위를 확인하세요.');
+   r.price=reverseUnitPrice(r.quantity,r.amount);r.quantity=Number(r.quantity);r.amount=Number(r.amount);r.calculation='reverse';
   }else if(r.mode==='amount'){
    if(!/^\d+$/.test(String(r.amount))||Number(r.amount)>1e12)fail('값은 0 이상 1조 이하 정수로 입력하세요.');
    r.amount=Number(r.amount);r.quantity=null;r.price=null;r.unit='원';

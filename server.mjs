@@ -36,11 +36,12 @@ function validateState(next,previous=null,restore=false){
   if(r.recordType==='count'&&(r.amount!==0||!Number.isSafeInteger(r.quantity)||r.quantity<0))throw err(400,'건수는 정수이며 금액은 0이어야 합니다.');
   if(previous&&JSON.stringify(old.get(r.id))===JSON.stringify(r))continue;
   try{
-   const checked=validateRecord({...r,mode:r.currency&&r.currency!=='KRW'?'fx':r.quantity==null||r.price==null?'amount':'calculated'},ctx,{previous:restore?r:old.get(r.id)});
+   const checked=validateRecord({...r,mode:r.calculation==='reverse'?'reverse':r.currency&&r.currency!=='KRW'?'fx':r.quantity==null||r.price==null?'amount':'calculated'},ctx,{previous:restore?r:old.get(r.id)});
    if((r.incoterm||'')!==checked.incoterm||(r.cargoType||'')!==checked.cargoType)throw Error('수출입 부가정보는 지원되는 대문자 코드로 입력하세요.');
    if((r.ciplNo||'')!==checked.ciplNo||(r.internalNo||'')!==checked.internalNo)throw Error('CIPL NO.와 내부 관리번호의 앞뒤 공백을 제거하세요.');
    if((r.chargeGroup||'')!==checked.chargeGroup||(r.namedPlace||'')!==checked.namedPlace)throw Error('비용 그룹 또는 지정 장소를 확인하세요.');
    if((r.containerType||'')!==checked.containerType)throw Error('컨테이너 타입을 확인하세요.');
+   if(r.calculation!==undefined&&(r.calculation!=='reverse'||r.recordType!=='cost'||(r.currency||'KRW')!=='KRW'||checked.price!==r.price||checked.quantity!==r.quantity))throw Error('역산 단가·수량·원화 입력 정보를 확인하세요.');
    if(checked.amount!==r.amount)throw Error('수량·단가 또는 외화·환율의 계산 결과와 금액이 일치하지 않습니다.');
    if(!restore&&((r.groupId||'')!==(checked.groupId||'')||(r.countryCode||'')!==(checked.countryCode||'')))throw Error('매장·센터의 소속과 국가 연결을 확인하세요. 과거 내역은 당시 소속을 유지합니다.');
    // Restoring a historical snapshot must preserve its original group/country.

@@ -175,3 +175,10 @@ test('category-specific charge groups restrict new records and imports but prese
  assert.throws(()=>validateRecord(raw,c),/비용 그룹/);assert.doesNotThrow(()=>validateRecord({...raw,chargeGroup:'출발지 비용'},c));
  assert.doesNotThrow(()=>validateRecord(raw,c,{previous:raw}));c.masters.at(-1).allowedChargeGroups=[];assert.doesNotThrow(()=>validateRecord({...raw,chargeGroup:''},c));
 });
+
+test('reverse entry preserves authoritative total, stores the quantity/unit-price evidence, and clears mode when switching',()=>{
+ const record=validateRecord({...base,mode:'reverse',quantity:'3',amount:'1000'},ctx);assert.equal(record.amount,1000);assert.equal(record.quantity,3);assert.equal(record.price,333.333333);assert.equal(record.calculation,'reverse');
+ const next=validateRecord({...record,mode:'reverse',quantity:'7',amount:'1001'},ctx,{previous:record});assert.equal(next.amount,1001);assert.equal(next.price,143);
+ const direct=validateRecord({...record,mode:'amount',amount:'1000'},ctx,{previous:record});assert.equal(direct.calculation,undefined);assert.equal(direct.quantity,null);
+ assert.throws(()=>validateRecord({...base,mode:'reverse',recordType:'count',quantity:3,amount:1000},ctx));
+});

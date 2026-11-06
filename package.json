@@ -13,6 +13,7 @@
     "test:aws-costs": "python3 -m unittest discover -s deploy/aws -p \"test_*.py\" -v",
     "review:build": "node scripts/build-review.mjs",
     "review": "node scripts/review-server.mjs",
+    "test:reverse": "python3 scripts/smoke-reverse.py",
     "test:search": "python3 scripts/smoke-search-confirm.py",
     "test:outbound": "python3 scripts/smoke-outbound.py",
     "test:quick": "python3 scripts/smoke-quick-entry.py",

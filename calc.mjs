@@ -53,3 +53,11 @@ export function csvCell(value){
  let text=String(value??'');if(typeof value!=='number'&&/^[\s\u0000-\u001f]*[=+@-]/.test(text))text="'"+text;
  return '"'+text.replaceAll('"','""')+'"';
 }
+
+// Rounded unit price is descriptive only; the supplied total remains authoritative.
+export function reverseUnitPrice(quantity,total){
+ const q=String(quantity??'').trim(),a=String(total??'').trim();if(!/^\d+(\.\d{1,3})?$/.test(q)||Number(q)<=0||Number(q)>1e12)throw Error('역산 수량은 0보다 크고 1조 이하, 소수 셋째 자리까지 입력하세요.');
+ if(!/^\d+$/.test(a)||Number(a)>1e12)throw Error('총비용은 0 이상 1조 이하 정수로 입력하세요.');
+ const [whole,fraction='']=q.split('.'),scaled=BigInt(whole)*1000n+BigInt(fraction.padEnd(3,'0'));
+ return Number((BigInt(a)*1000000000n+scaled/2n)/scaled)/1000000;
+}

@@ -29,3 +29,9 @@ test('CSV exports numeric refunds as numbers and neutralizes text formulas inclu
  for(const value of ['=1+1','  =1+1','\t@SUM(A1)','\r+1+1','-external'])assert.ok(csvCell(value).startsWith('"\''));
  assert.equal(csvCell('메모 "검증"'),'"메모 ""검증"""');
 });
+
+import {reverseUnitPrice} from './calc.mjs';
+test('reverse unit prices use deterministic rounding while totals remain independent',()=>{
+ assert.equal(reverseUnitPrice('3','1000'),333.333333);assert.equal(reverseUnitPrice('6','1'),0.166667);assert.equal(reverseUnitPrice('0.001','1'),1000);assert.equal(reverseUnitPrice('100','0'),0);assert.equal(reverseUnitPrice('6623','17244352'),2603.707081);
+ for(const [q,a] of [['0','100'],['-1','100'],['1','-1'],['1.0001','100'],['1','1000000000001'],['','1']])assert.throws(()=>reverseUnitPrice(q,a));
+});

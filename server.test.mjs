@@ -138,3 +138,13 @@ test('incomplete drafts are private, durable and excluded from workspace revisio
   assert.equal((await restored('/api/drafts',{method:'DELETE',body:{slot:'entry:center'}})).status,200);assert.equal((await restored('/api/drafts')).data.drafts.length,0);
  }finally{await app.close();rmSync(dir,{recursive:true,force:true});}
 });
+
+test('reverse-derived prices persist without changing total and reject inconsistent derived evidence through save/restore',async()=>{
+ const {validateRecord}=await import('./domain.mjs');const app=await start(),admin=client(app.url),pass=password();try{
+  await admin('/api/setup',{method:'POST',body:{username:'reverseadmin',password:pass}});await admin('/api/login',{method:'POST',body:{username:'reverseadmin',password:pass}});
+  const state=initial(),ctx={...state,units:['건','BOX']};state.costs=[validateRecord({...row('reverse'),mode:'reverse',quantity:'6623',amount:'17244352',unit:'건'},ctx)];
+  assert.equal((await admin('/api/state',{method:'PUT',body:{revision:0,state}})).status,200);const backup=(await admin('/api/backup')).data;assert.equal(backup.state.costs[0].amount,17244352);assert.equal(backup.state.costs[0].calculation,'reverse');
+  const bad=structuredClone(state);bad.costs[0].price+=1;assert.equal((await admin('/api/state',{method:'PUT',body:{revision:1,state:bad}})).status,400);assert.equal((await admin('/api/state')).data.revision,1);
+  assert.equal((await admin('/api/restore',{method:'POST',body:{revision:1,backup,currentPassword:pass}})).status,200);assert.equal((await admin('/api/state')).data.state.costs[0].price,state.costs[0].price);
+ }finally{await app.close();}
+});
