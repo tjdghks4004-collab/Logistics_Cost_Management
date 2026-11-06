@@ -112,3 +112,29 @@ test('material masters are admin-only and purchase snapshots persist with supply
   assert.equal((await admin('/api/restore',{method:'POST',body:{revision:3,backup,currentPassword:pass}})).status,200);backup=(await admin('/api/backup')).data;assert.equal(backup.state.materials[0].name,'택배박스 S');assert.equal(backup.state.costs[0].material.specification,'210×160×120');
  }finally{await app.close();}
 });
+
+test('custom billing units persist with admin-only writes and work in server cost calculation',async()=>{
+ const app=await start(),admin=client(app.url),pass=password();try{
+  await admin('/api/setup',{method:'POST',body:{username:'unitadmin',password:pass}});await admin('/api/login',{method:'POST',body:{username:'unitadmin',password:pass}});
+  const state=initial();state.billingUnits=['40FT','판'];state.masters[0].unit='40FT';state.costs=[{...row('custom-unit'),unit:'40FT'}];assert.equal((await admin('/api/state',{method:'PUT',body:{revision:0,state}})).status,200);
+  assert.deepEqual((await admin('/api/backup')).data.state.billingUnits,['40FT','판']);
+  await admin('/api/users',{method:'POST',body:{username:'uniteditor',password:pass,role:'editor'}});const ed=client(app.url);await ed('/api/login',{method:'POST',body:{username:'uniteditor',password:pass}});
+  const bad={...state,billingUnits:['40FT','판','new']};assert.equal((await ed('/api/state',{method:'PUT',body:{revision:1,state:bad}})).status,403);
+  state.costs[0].quantity=200;state.costs[0].amount=100000;assert.equal((await ed('/api/state',{method:'PUT',body:{revision:1,state}})).status,200);
+ }finally{await app.close();}
+});
+test('incomplete drafts are private, durable and excluded from workspace revisions, costs and snapshots',async()=>{
+ const dir=mkdtempSync(join(tmpdir(),'scm-drafts-')),dbPath=join(dir,'app.sqlite'),pass=password();let app=await start(dbPath);try{
+  let admin=client(app.url);await admin('/api/setup',{method:'POST',body:{username:'draftadmin',password:pass}});await admin('/api/login',{method:'POST',body:{username:'draftadmin',password:pass}});
+  await admin('/api/state',{method:'PUT',body:{revision:0,state:initial()}});
+  for(const role of ['editor','viewer'])await admin('/api/users',{method:'POST',body:{username:'draft_'+role,password:pass,role}});
+  const ed=client(app.url),viewer=client(app.url);await ed('/api/login',{method:'POST',body:{username:'draft_editor',password:pass}});await viewer('/api/login',{method:'POST',body:{username:'draft_viewer',password:pass}});
+  const data={kind:'entry',domain:'center',draft:{rows:[{quantity:'12',price:''}]}};
+  assert.equal((await ed('/api/drafts',{method:'PUT',body:{slot:'entry:center',data}})).status,200);assert.equal((await viewer('/api/drafts')).status,403);
+  assert.equal((await admin('/api/drafts')).data.drafts.length,0);assert.equal((await ed('/api/state')).data.revision,1);assert.equal((await ed('/api/state')).data.state.costs.length,0);
+  const backup=(await admin('/api/backup')).data;assert.ok(!JSON.stringify(backup).includes('entry:center'));
+  assert.equal((await ed('/api/drafts',{method:'PUT',body:{slot:'bad',data:[]}})).status,400);
+  await app.close();app=await start(dbPath);const restored=client(app.url);await restored('/api/login',{method:'POST',body:{username:'draft_editor',password:pass}});assert.deepEqual((await restored('/api/drafts')).data.drafts[0].data,data);
+  assert.equal((await restored('/api/drafts',{method:'DELETE',body:{slot:'entry:center'}})).status,200);assert.equal((await restored('/api/drafts')).data.drafts.length,0);
+ }finally{await app.close();rmSync(dir,{recursive:true,force:true});}
+});

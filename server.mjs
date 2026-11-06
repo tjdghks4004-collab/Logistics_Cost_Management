@@ -1,3 +1,4 @@
+import {billingUnitsFor,validateBillingUnits} from './units.mjs';
 import {validateMaterialMasters,validateMaterialCosts} from './materials.mjs';
 import {validateSales} from './sales.mjs';
 import {validateTargets} from './periods.mjs';
@@ -27,9 +28,9 @@ function validateState(next,previous=null,restore=false){
  if(next.centerMasters.some(c=>!text(c.name)||!country(c.countryCode)))throw err(400,'센터 국가 연결을 확인하세요.');
  if(next.stores.some(s=>!text(s.id)||!text(s.name,40)||!(/^[A-Z0-9_-]{1,20}$/).test(s.code)||!group(s.groupId)||typeof s.active!=='boolean'))throw err(400,'매장 마스터 값을 확인하세요.');
  if(next.masters.some(m=>!text(m.name,100)||typeof m.active!=='boolean'||(m.allowedChargeGroups!==undefined&&!validChargeGroupMapping(m.allowedChargeGroups))||(m.parentCategory!==undefined&&!validParentCategory(m.parentCategory))))throw err(400,'비용 항목 값을 확인하세요.');
- try{validateMaterialMasters(next,restore?null:previous);validateMaterialCosts(next,previous,{restore});validateSales(next.sales??[],next);validateTargets(next.targets??[],next);}catch(e){throw err(400,e.message);}
+ try{validateBillingUnits(next);validateMaterialMasters(next,restore?null:previous);validateMaterialCosts(next,previous,{restore});validateSales(next.sales??[],next);validateTargets(next.targets??[],next);}catch(e){throw err(400,e.message);}
  const old=new Map((previous?.costs||[]).map(r=>[r.id,r]));
- const ctx={countries:next.countries,groups:next.groups,centerMasters:next.centerMasters,stores:next.stores.map(s=>restore?{...s,active:true}:s),masters:next.masters.map(m=>restore?{...m,active:true}:m),units:['PLT','BOX','EA','건','KG','CBM','월','일','일괄']};
+ const ctx={countries:next.countries,groups:next.groups,centerMasters:next.centerMasters,stores:next.stores.map(s=>restore?{...s,active:true}:s),masters:next.masters.map(m=>restore?{...m,active:true}:m),units:billingUnitsFor(next)};
  for(const r of next.costs){
   if(!text(r.id)||!Number.isSafeInteger(r.amount)||r.amount<0||r.amount>1e12||!['center','trade','common'].includes(r.domain)||!['cost','count'].includes(r.recordType))throw err(400,'비용 자료 유형·금액을 확인하세요.');
   if(r.recordType==='count'&&(r.amount!==0||!Number.isSafeInteger(r.quantity)||r.quantity<0))throw err(400,'건수는 정수이며 금액은 0이어야 합니다.');
@@ -59,6 +60,7 @@ export function createApp({dbPath=process.env.LOGISTICS_DB_PATH||resolve(root,'d
  db.exec(`PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON; PRAGMA busy_timeout=5000;
  CREATE TABLE IF NOT EXISTS users(id INTEGER PRIMARY KEY,username TEXT UNIQUE NOT NULL,name TEXT NOT NULL,password_hash TEXT NOT NULL,role TEXT NOT NULL,active INTEGER NOT NULL DEFAULT 1);
  CREATE TABLE IF NOT EXISTS sessions(token_hash TEXT PRIMARY KEY,user_id INTEGER NOT NULL REFERENCES users(id),csrf TEXT NOT NULL,expires INTEGER NOT NULL);
+ CREATE TABLE IF NOT EXISTS drafts(user_id INTEGER NOT NULL REFERENCES users(id),slot TEXT NOT NULL,document TEXT NOT NULL,updated_at TEXT NOT NULL,PRIMARY KEY(user_id,slot));
  CREATE TABLE IF NOT EXISTS workspace(id INTEGER PRIMARY KEY CHECK(id=1),revision INTEGER NOT NULL,document TEXT NOT NULL);
  CREATE TABLE IF NOT EXISTS audit(id INTEGER PRIMARY KEY,at TEXT NOT NULL,actor TEXT NOT NULL,action TEXT NOT NULL,details TEXT NOT NULL);
  CREATE TABLE IF NOT EXISTS snapshots(id INTEGER PRIMARY KEY,at TEXT NOT NULL,revision INTEGER NOT NULL,document TEXT NOT NULL);`);
@@ -100,6 +102,15 @@ export function createApp({dbPath=process.env.LOGISTICS_DB_PATH||resolve(root,'d
     if(path==='/api/me'&&req.method==='GET')return json(200,{user:cleanUser(session),csrf:session.csrf});
     if(path==='/api/logout'&&req.method==='POST'){db.prepare('DELETE FROM sessions WHERE token_hash=?').run(session.token_hash);res.setHeader('Set-Cookie','logistics_session=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0');return json(200,{ok:true});}
     if(path==='/api/password'&&req.method==='POST'){const d=await readBody(req);if(!validPassword(d.currentPassword,session.password_hash))throw err(403,'현재 비밀번호를 확인하세요.');credentials({username:session.username,password:d.password});db.prepare('UPDATE users SET password_hash=? WHERE id=?').run(hashPassword(d.password),session.id);db.prepare('DELETE FROM sessions WHERE user_id=?').run(session.id);audit(session.username,'password-change',{});return json(200,{ok:true});}
+    if(path==='/api/drafts'){
+     if(!['admin','editor'].includes(session.role))throw err(403,'임시 저장은 입력 권한이 필요합니다.');
+     if(req.method==='GET')return json(200,{drafts:db.prepare('SELECT slot,document,updated_at FROM drafts WHERE user_id=? ORDER BY updated_at DESC').all(session.id).map(r=>({slot:r.slot,data:JSON.parse(r.document),updatedAt:r.updated_at}))});
+     if(['PUT','DELETE'].includes(req.method)){const d=await readBody(req);if(typeof d.slot!=='string'||!d.slot.length||d.slot.length>200||/[\u0000-\u001f\u007f]/.test(d.slot))throw err(400,'임시 저장 위치를 확인하세요.');
+      if(req.method==='DELETE'){db.prepare('DELETE FROM drafts WHERE user_id=? AND slot=?').run(session.id,d.slot);return json(200,{ok:true});}
+      if(!d.data||typeof d.data!=='object'||Array.isArray(d.data))throw err(400,'임시 저장 형식을 확인하세요.');const document=JSON.stringify(d.data);if(Buffer.byteLength(document)>1e6)throw err(413,'임시 저장은 한 건당 1MB 이하입니다.');if(!db.prepare('SELECT 1 FROM drafts WHERE user_id=? AND slot=?').get(session.id,d.slot)&&db.prepare('SELECT COUNT(*) AS n FROM drafts WHERE user_id=?').get(session.id).n>=100)throw err(400,'임시 저장은 계정당 100개까지 보관합니다.');
+      const updatedAt=new Date().toISOString();db.prepare('INSERT INTO drafts VALUES(?,?,?,?) ON CONFLICT(user_id,slot) DO UPDATE SET document=excluded.document,updated_at=excluded.updated_at').run(session.id,d.slot,document,updatedAt);return json(200,{ok:true,updatedAt});
+     }
+    }
     if(path==='/api/state'&&req.method==='GET')return json(200,workspace());
     if(path==='/api/state'&&req.method==='PUT'){if(!['admin','editor'].includes(session.role))throw err(403,'조회 계정은 저장할 수 없습니다.');const d=await readBody(req);if(!workspace().state)requireAdmin(session);return json(200,writeWorkspace(d.state,d.revision,session,'save'));}
     if(path==='/api/users'&&req.method==='GET'){requireAdmin(session);return json(200,{users:db.prepare('SELECT id,username,name,role,active FROM users').all().map(cleanUser)});}
@@ -112,7 +123,7 @@ export function createApp({dbPath=process.env.LOGISTICS_DB_PATH||resolve(root,'d
     throw err(404,'지원하지 않는 API입니다.');
    }
    if(!['GET','HEAD'].includes(req.method))throw err(405,'허용되지 않는 요청입니다.');
-   const allowed=new Set(['/index.html','/login.html','/login.mjs','/style.css','/app.mjs','/api-client.mjs','/calc.mjs','/periods.mjs','/domain.mjs','/excel.mjs','/store-import.mjs','/sales.mjs','/cost-tabs.mjs','/materials.mjs','/import-data.mjs','/node_modules/exceljs/dist/exceljs.min.js']);
+   const allowed=new Set(['/index.html','/login.html','/login.mjs','/style.css','/app.mjs','/api-client.mjs','/calc.mjs','/periods.mjs','/domain.mjs','/excel.mjs','/store-import.mjs','/sales.mjs','/cost-tabs.mjs','/materials.mjs','/units.mjs','/import-data.mjs','/node_modules/exceljs/dist/exceljs.min.js']);
    const file=path==='/'?'/index.html':path;if(!allowed.has(file))throw err(404,'파일이 없습니다.');
    const full=resolve(root,'.'+file),mime={'.html':'text/html; charset=utf-8','.mjs':'text/javascript; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8'};
    res.writeHead(200,{'Content-Type':mime[extname(file)]||'application/octet-stream','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'});res.end(req.method==='HEAD'?'':readFileSync(full));

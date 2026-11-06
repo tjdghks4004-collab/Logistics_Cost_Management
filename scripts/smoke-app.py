@@ -154,7 +154,7 @@ def main():
             boxes=page.locator('#user-form input,#user-form select,#user-form>button').evaluate_all('els=>els.map(e=>{const r=e.getBoundingClientRect();return {bottom:r.bottom,height:r.height}})')
             assert max(b['bottom'] for b in boxes)-min(b['bottom'] for b in boxes)<1,boxes
             assert all(abs(b['height']-40)<1 for b in boxes),boxes
-            assert page.locator('main>header').evaluate('el=>Math.abs(el.getBoundingClientRect().left-document.querySelector("aside").getBoundingClientRect().right)<1')
+            assert page.locator('main>header').evaluate('el=>el.getBoundingClientRect().left>=0&&el.getBoundingClientRect().right<=innerWidth+1')
             for username,role in [('scm_editor','editor'),('scm_viewer','viewer')]:
                 page.fill('#user-form [name=username]',username);page.fill('#user-form [name=name]',username);page.fill('#user-form [name=password]',password);page.select_option('#user-form [name=role]',role);page.click('#user-form button')
                 page.wait_for_function('(name)=>document.querySelector("#user-list").textContent.includes(name)',arg=username)

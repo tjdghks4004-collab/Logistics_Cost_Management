@@ -19,6 +19,7 @@ async function persist(next){
  reviewDocument=copy;revision++;return {revision};
 }
 async function api(path,options={}){
+ if(path==='drafts'){let drafts=JSON.parse(localStorage.getItem('scm-review-drafts')||'[]');const d=JSON.parse(options.body||'{}');if(options.method==='DELETE')drafts=drafts.filter(r=>r.slot!==d.slot);if(options.method==='PUT'){drafts=drafts.filter(r=>r.slot!==d.slot);drafts.push({slot:d.slot,data:d.data,updatedAt:new Date().toISOString()});}localStorage.setItem('scm-review-drafts',JSON.stringify(drafts));return options.method==='PUT'?drafts.find(r=>r.slot===d.slot):{drafts};}
  if(path==='state')return {state:structuredClone(reviewDocument),revision};
  if(path==='me')return session;
  if(path==='backup')return {schemaVersion:1,exportedAt:new Date().toISOString(),state:structuredClone(reviewDocument),revision};
@@ -26,7 +27,7 @@ async function api(path,options={}){
 }
 `;
 const stripModules=source=>source.replace(/^import .*?;\s*$/gm,'').replace(/^export\s+/gm,'');
-const app=['calc.mjs','materials.mjs','periods.mjs','domain.mjs','import-data.mjs','excel.mjs','store-import.mjs','sales.mjs','cost-tabs.mjs','app.mjs'].map(name=>stripModules(read(name))).join('\n');
+const app=['calc.mjs','units.mjs','materials.mjs','periods.mjs','domain.mjs','import-data.mjs','excel.mjs','store-import.mjs','sales.mjs','cost-tabs.mjs','app.mjs'].map(name=>stripModules(read(name))).join('\n');
 const tail=`
 document.querySelector('#review-reset').onclick=()=>{if(confirm('이 검토본의 예시 데이터를 처음 상태로 되돌릴까요?')){localStorage.removeItem(reviewStorageKey);location.reload();}};
 `;
