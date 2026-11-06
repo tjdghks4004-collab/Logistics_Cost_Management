@@ -38,6 +38,19 @@ def main():
             page.add_init_script("const actualConfirm=window.confirm.bind(window);window.confirm=m=>/^(등록을|수정을) 확정하시겠습니까/.test(String(m))?true:actualConfirm(m);")
             page.on('request',lambda request:requests.append(request.url))
             page.goto(origin);page.wait_for_selector('.kpi')
+            assert page.locator('[role=tab][data-dashboard-tab]').count()==5
+            assert page.locator('[role=tabpanel]:visible').count()==1
+            assert page.locator('#dashboard-panel-overview').is_visible()
+            assert not page.locator('.period-help').evaluate('e=>e.open')
+            initial_kpi=page.locator('.kpi .value').first.inner_text()
+            for tab in ['comparison','efficiency','centers','stores','overview']:
+                page.click(f'[data-dashboard-tab={tab}]')
+                assert page.locator('[role=tabpanel]:visible').count()==1
+                assert page.locator(f'#dashboard-panel-{tab}').is_visible()
+                assert page.locator('.kpi .value').first.inner_text()==initial_kpi
+            page.locator('[data-dashboard-tab=overview]').focus()
+            page.keyboard.press('ArrowRight')
+            assert page.locator('[data-dashboard-tab=comparison]').get_attribute('aria-selected')=='true'
             def check_item_chart():
                 for item_series,trend_series in [('current','조회 비용'),('previous','비교 비용')]:
                     item_total=sum(float(bar.get_attribute('data-value')) for bar in page.locator(f'#cost-item-chart [data-item-series="{item_series}"]').all())
@@ -68,6 +81,7 @@ def main():
                 assert abs(float(point.get_attribute('data-eff-unit'))-expected)<0.00001
             assert page.locator('#cost-item-chart .item-bar').count()>0
             assert page.locator('#cost-item-chart svg').count()==0
+            page.click('[data-dashboard-tab=comparison]')
             page.select_option('#item-chart-level','parent');check_item_chart()
             assert page.locator('#cost-item-chart [data-item-name="보관·임차비"]').count()>0
             page.select_option('#item-chart-level','child')
@@ -316,6 +330,7 @@ rows.forEach((row,i)=>sheet.getRow(i+2).values=headers.map(h=>row[h]??''));await
             page.reload();page.wait_for_selector('.kpi');assert page.locator('.kpi .value').first.inner_text()=='₩111,178,000'
             check_item_chart()
             assert page.locator('#record-type,[data-multi="record-type"]').count()==0
+            page.click('[data-dashboard-tab=comparison]')
             page.select_option('#item-chart-level','parent');check_item_chart()
             page.set_viewport_size({'width':390,'height':844})
             assert page.locator('#cost-item-chart').evaluate('el=>el.scrollWidth<=el.clientWidth')
