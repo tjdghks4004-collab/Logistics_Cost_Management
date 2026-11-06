@@ -1,3 +1,4 @@
+import {searchIncludes} from './search.mjs';
 import {preferScopeTotals,lineAmount,convertForeignAmount} from './calc.mjs';
 export const incoterms=['EXW','FCA','CPT','CIP','DAP','DPU','DDP','FAS','FOB','CFR','CIF'];
 export const cargoTypes=['LCL','FCL','AIR'];
@@ -138,7 +139,7 @@ export function syncRecommendedTradeRows(rows,recommended,createRow){
 
 export function filterTradeRows(rows,{query='',incoterm='all',cargoType='all'}={}){
  const q=query.trim().toLocaleLowerCase();
- return rows.filter(r=>r.domain==='trade'&&r.recordType!=='count'&&(incoterm==='all'||r.incoterm===incoterm)&&(cargoType==='all'||r.cargoType===cargoType)&&(!q||[r.shipment,r.ciplNo,r.internalNo].some(v=>String(v||'').toLocaleLowerCase().includes(q))));
+ return rows.filter(r=>r.domain==='trade'&&r.recordType!=='count'&&(incoterm==='all'||r.incoterm===incoterm)&&(cargoType==='all'||r.cargoType===cargoType)&&(!q||[r.shipment,r.ciplNo,r.internalNo].some(v=>searchIncludes(v,q))));
 }
 export function summarizeTradeRows(rows){
  const map=new Map();for(const r of rows){if(r.domain!=='trade'||r.recordType==='count')continue;
@@ -164,7 +165,7 @@ export function costReviewItems(row){
 }
 export function filterCostRecords(rows,{query='',check='all'}={},displayText=()=>[]){
  const q=query.trim().toLocaleLowerCase();
- return rows.filter(row=>(check==='all'||costReviewItems(row).some(item=>item.key===check))&&(!q||[row.month,row.center,row.countryCode,row.account,row.category,row.chargeGroup,row.shipment,row.ciplNo,row.internalNo,row.incoterm,row.cargoType,row.containerType,row.currency,row.memo,row.material?.code,row.material?.name,row.material?.specification,row.material?.supplier,...displayText(row)].some(value=>String(value??'').toLocaleLowerCase().includes(q))));
+ return rows.filter(row=>(check==='all'||costReviewItems(row).some(item=>item.key===check))&&(!q||[row.month,row.center,row.countryCode,row.account,row.category,row.chargeGroup,row.shipment,row.ciplNo,row.internalNo,row.incoterm,row.cargoType,row.containerType,row.currency,row.memo,row.material?.code,row.material?.name,row.material?.specification,row.material?.supplier,...displayText(row)].some(value=>searchIncludes(value,q))));
 }
 
 // A category remains the stable import/record key; its parent is master metadata.

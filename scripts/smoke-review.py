@@ -35,6 +35,7 @@ def main():
             page=browser.new_page(viewport={'width':1440,'height':1050})
             errors=[];requests=[]
             page.on('pageerror',lambda error:errors.append(str(error)))
+            page.add_init_script("const actualConfirm=window.confirm.bind(window);window.confirm=m=>/^(등록을|수정을) 확정하시겠습니까/.test(String(m))?true:actualConfirm(m);")
             page.on('request',lambda request:requests.append(request.url))
             page.goto(origin);page.wait_for_selector('.kpi')
             def check_item_chart():

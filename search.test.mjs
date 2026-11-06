@@ -1,0 +1,4 @@
+import {test} from 'node:test';import assert from 'node:assert/strict';
+import {searchIncludes,matchingStores} from './search.mjs';
+test('substring matching includes suffix, middle, case, spacing and fullwidth text',()=>{for(const [label,q] of [['마켓컬리','컬리'],['마켓컬리 온라인','컬리'],['NAVER Store','aver'],['마켓 컬리','마켓컬리'],['ＣＵＲＬＹ','curly']])assert.ok(searchIncludes(label,q));assert.equal(searchIncludes('마켓컬리','쿠팡'),false);});
+test('store suggestions find a middle word, keep codes, exclude inactive and preserve existing records',()=>{const stores=[{id:'a',code:'C001',name:'마켓컬리',active:true},{id:'b',code:'C002',name:'컬리 온라인',active:true},{id:'c',code:'C003',name:'구 컬리',active:false}];assert.deepEqual(matchingStores('컬리',stores).map(s=>s.id),['a','b']);assert.deepEqual(matchingStores('001',stores).map(s=>s.id),['a']);assert.equal(matchingStores('컬리',stores,{existingId:'c'}).length,3);});

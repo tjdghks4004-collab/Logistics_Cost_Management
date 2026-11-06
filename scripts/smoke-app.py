@@ -25,6 +25,7 @@ def main():
         server,origin=start();browser=p.chromium.launch(executable_path='/usr/bin/chromium',headless=True,args=['--no-sandbox'])
         try:
             page=browser.new_page();errors=[];page.on('pageerror',lambda e:errors.append(str(e)))
+            page.add_init_script("const actualConfirm=window.confirm.bind(window);window.confirm=m=>/^(등록을|수정을) 확정하시겠습니까/.test(String(m))?true:actualConfirm(m);")
             page.goto(origin);page.wait_for_selector('#login-form')
             page.wait_for_function("document.querySelector('#login-title').textContent==='최초 관리자 등록'")
             page.fill('[name=username]','scm_admin');page.fill('[name=name]','SCM 관리자');page.fill('[name=password]',password);page.click('#login-form button')

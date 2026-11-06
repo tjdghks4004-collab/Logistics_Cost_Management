@@ -12,6 +12,7 @@ def main():
   try:
    port=process.stdout.readline().strip();assert port.isdigit();origin='http://127.0.0.1:'+port
    browser=pw.chromium.launch(executable_path='/usr/bin/chromium',headless=True,args=['--no-sandbox']);page=browser.new_page(viewport={'width':1440,'height':1050});errors=[];page.on('pageerror',lambda e:errors.append(str(e)))
+   page.add_init_script("const actualConfirm=window.confirm.bind(window);window.confirm=m=>/^(등록을|수정을) 확정하시겠습니까/.test(String(m))?true:actualConfirm(m);")
    def login(username):
     page.goto(origin);page.wait_for_selector('#login-form');page.fill('[name=username]',username);page.fill('[name=password]',password);page.click('#login-form button')
    def state():return page.evaluate("async()=>(await (await fetch('/api/state')).json()).state")
