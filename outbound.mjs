@@ -1,0 +1,12 @@
+import {validateRecord,assertNoNewCostDuplicates} from './domain.mjs';
+export function summarizeOutboundRows(rows){
+ const groups=new Map(),byId=new Map();for(const row of rows){if(row.domain!=='center'||!['B2C','B2B'].includes(row.account)||!(row.recordType==='count'||row.category===row.account+' 출고비'))continue;const key=JSON.stringify([row.month,row.countryCode||'',row.center,row.storeId||'',row.groupId||'',row.account]);if(!groups.has(key))groups.set(key,{key,costs:[],counts:[]});const group=groups.get(key);(row.recordType==='count'?group.counts:group.costs).push(row);byId.set(row,key);}
+ const used=new Set(),result=[];for(const row of rows){const key=byId.get(row),group=groups.get(key);if(!group?.costs.length||!group.counts.length){result.push({row,sources:[row],paired:false,amount:row.recordType==='count'?null:row.amount,quantity:row.recordType==='count'?row.quantity:null,unitCost:null});continue;}if(used.has(key))continue;used.add(key);const amount=group.costs.reduce((n,r)=>n+r.amount,0),quantity=group.counts.reduce((n,r)=>n+Number(r.quantity),0);result.push({row,sources:[...group.costs,...group.counts],paired:true,amount,quantity,unitCost:quantity>0?amount/quantity:null});}return result;
+}
+export function planOutboundEntry(draft,context){
+ const entries=[],errors=[];if(!Array.isArray(draft.rows)||draft.rows.length>1000)return {entries,errors:['최대 1,000개 매장을 나누어 입력하세요.']};
+ for(let i=0;i<draft.rows.length;i++){const r=draft.rows[i],hasCost=String(r.amount??'').trim()!=='',hasCount=String(r.quantity??'').trim()!=='';if(!hasCost&&!hasCount&&!r.memo&&!r.storeQuery)continue;
+ try{if(r.storeQuery)throw Error('매장 검색을 완료하세요.');if(!hasCost&&!hasCount)throw Error('출고비 또는 출고 건수를 입력하세요.');for(const type of ['cost','count']){if(type==='cost'&&!hasCost||type==='count'&&!hasCount)continue;entries.push(validateRecord({domain:'center',recordType:type,month:draft.month,center:draft.center,account:draft.account,storeId:r.storeId||'',groupId:r.groupId||'',category:draft.account+' 출고비',mode:'amount',amount:r.amount,quantity:r.quantity,unit:type==='count'?'건':'원',memo:r.memo||''},context));}}
+ catch(error){errors.push(`${i+1}행: ${error.message}`);}}
+ if(!entries.length&&!errors.length)errors.push('출고비 또는 건수를 입력하세요.');if(!errors.length)try{assertNoNewCostDuplicates([...(context.costs||[]),...entries],context.costs||[]);}catch(error){errors.push(error.message);}return {entries,errors};
+}

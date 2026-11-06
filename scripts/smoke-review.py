@@ -149,6 +149,7 @@ def main():
             page.click('[data-view=costs]')
             assert page.locator('[data-edit]').count()==36
             page.click('[data-cost-tab=center]');assert page.locator('[data-edit]').count()==36
+            page.click('[data-cost-layout=rows]')
             center_columns=page.locator('#cost-records-table th').all_text_contents()
             assert '센터' in center_columns and '유형 / 업무' in center_columns and '수출입관리번호' not in center_columns
             assert page.locator('#cost-records-table tbody tr').first.locator('td').count()==len(center_columns)
