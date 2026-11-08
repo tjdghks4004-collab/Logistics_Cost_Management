@@ -1,3 +1,4 @@
+import {validateOperationalControls} from './controls.mjs';
 import {billingUnitsFor,validateBillingUnits} from './units.mjs';
 import {validateMaterialMasters,validateMaterialCosts} from './materials.mjs';
 import {validateSales} from './sales.mjs';
@@ -71,8 +72,8 @@ export function createApp({dbPath=process.env.LOGISTICS_DB_PATH||resolve(root,'d
  const requireAdmin=u=>{if(u.role!=='admin')throw err(403,'관리자 권한이 필요합니다.');};
  const readBody=async req=>{let size=0,chunks=[];for await(const chunk of req){size+=chunk.length;if(size>10e6)throw err(413,'요청 크기는 10MB 이하입니다.');chunks.push(chunk);}try{return JSON.parse(Buffer.concat(chunks).toString()||'{}');}catch{throw err(400,'JSON 형식이 올바르지 않습니다.');}};
  function writeWorkspace(next,revision,user,action){
-  db.exec('BEGIN IMMEDIATE');try{const current=workspace();if(revision!==current.revision)throw err(409,'다른 사용자가 자료를 변경했습니다. 입력 내용을 보관한 후 새로고침해 다시 확인하세요.');validateState(next,current.state,action==='restore');
-   if(user.role==='editor')for(const key of new Set([...Object.keys(current.state||{}),...Object.keys(next)]))if(!['costs','activity','notes','sales'].includes(key)&&JSON.stringify(current.state?.[key])!==JSON.stringify(next[key]))throw err(403,'기준정보 변경은 관리자만 가능합니다.');
+  db.exec('BEGIN IMMEDIATE');try{const current=workspace();if(revision!==current.revision)throw err(409,'다른 사용자가 자료를 변경했습니다. 입력 내용을 보관한 후 새로고침해 다시 확인하세요.');validateState(next,current.state,action==='restore');try{validateOperationalControls(next,current.state,{role:user.role,actor:user.username,restore:action==='restore'});}catch(e){throw err(400,e.message);}
+   if(user.role==='editor')for(const key of new Set([...Object.keys(current.state||{}),...Object.keys(next)]))if(!['costs','activity','notes','sales','importBatches','reconciliations'].includes(key)&&JSON.stringify(current.state?.[key])!==JSON.stringify(next[key]))throw err(403,'기준정보 변경은 관리자만 가능합니다.');
    if(current.state){db.prepare('INSERT INTO snapshots(at,revision,document) VALUES(?,?,?)').run(new Date().toISOString(),current.revision,JSON.stringify(current.state));db.exec('DELETE FROM snapshots WHERE id NOT IN (SELECT id FROM snapshots ORDER BY id DESC LIMIT 20)');}
    const rev=current.revision+1;db.prepare('INSERT INTO workspace VALUES(1,?,?) ON CONFLICT(id) DO UPDATE SET revision=excluded.revision,document=excluded.document').run(rev,JSON.stringify(next));audit(user.username,action,{revision:rev,changes:changes(current.state,next)});db.exec('COMMIT');return {revision:rev};
   }catch(e){db.exec('ROLLBACK');throw e;}
@@ -124,7 +125,7 @@ export function createApp({dbPath=process.env.LOGISTICS_DB_PATH||resolve(root,'d
     throw err(404,'지원하지 않는 API입니다.');
    }
    if(!['GET','HEAD'].includes(req.method))throw err(405,'허용되지 않는 요청입니다.');
-   const allowed=new Set(['/index.html','/login.html','/login.mjs','/style.css','/app.mjs','/api-client.mjs','/calc.mjs','/periods.mjs','/domain.mjs','/excel.mjs','/store-import.mjs','/sales.mjs','/cost-tabs.mjs','/materials.mjs','/units.mjs','/quick-entry.mjs','/outbound.mjs','/search.mjs','/import-data.mjs','/node_modules/exceljs/dist/exceljs.min.js']);
+   const allowed=new Set(['/index.html','/login.html','/login.mjs','/style.css','/app.mjs','/api-client.mjs','/calc.mjs','/periods.mjs','/domain.mjs','/excel.mjs','/store-import.mjs','/sales.mjs','/cost-tabs.mjs','/materials.mjs','/units.mjs','/quick-entry.mjs','/outbound.mjs','/search.mjs','/controls.mjs','/import-data.mjs','/node_modules/exceljs/dist/exceljs.min.js']);
    const file=path==='/'?'/index.html':path;if(!allowed.has(file))throw err(404,'파일이 없습니다.');
    const full=resolve(root,'.'+file),mime={'.html':'text/html; charset=utf-8','.mjs':'text/javascript; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8'};
    res.writeHead(200,{'Content-Type':mime[extname(file)]||'application/octet-stream','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'});res.end(req.method==='HEAD'?'':readFileSync(full));

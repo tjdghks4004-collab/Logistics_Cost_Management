@@ -148,3 +148,21 @@ test('reverse-derived prices persist without changing total and reject inconsist
   assert.equal((await admin('/api/restore',{method:'POST',body:{revision:1,backup,currentPassword:pass}})).status,200);assert.equal((await admin('/api/state')).data.state.costs[0].price,state.costs[0].price);
  }finally{await app.close();}
 });
+
+test('operational controls enforce role, locked finance, restore and batch cancellation at API boundary',async()=>{
+ const {cancelImportBatch}=await import('./controls.mjs');const app=await start(),c=client(app.url),pass=password();try{
+ await c('/api/setup',{method:'POST',body:{username:'admin',password:pass}});await c('/api/login',{method:'POST',body:{username:'admin',password:pass}});
+ let doc=initial(),rev=0;const put=next=>c('/api/state',{method:'PUT',body:{revision:rev,state:next}});const commit=async next=>{const r=await put(next);assert.equal(r.status,200,JSON.stringify(r.data));rev=r.data.revision;doc=next;};await commit(doc);
+ const at=new Date().toISOString(),r=row('ops');await commit({...doc,costs:[r],importBatches:[{id:'batch',name:'original.xlsx',actor:'admin',at,rows:[r]}]});
+ await commit({...doc,reconciliations:[{id:'check',reference:'청구서1',expected:r.amount,recordIds:[r.id],months:[r.month],actor:'admin',at}]});
+ const e={id:'close',action:'close',month:r.month,reason:'청구서 확인',actor:'admin',at};await commit({...doc,periodEvents:[e]});
+ for(const next of [{...doc,costs:[]},{...doc,costs:[{...r,amount:60000}]},{...doc,reconciliations:[]},{...doc,periodEvents:[]}])assert.equal((await put(next)).status,400);
+ assert.equal((await c('/api/restore',{method:'POST',body:{revision:rev,currentPassword:pass,backup:{schemaVersion:1,state:initial()}}})).status,400);
+ assert.equal((await c('/api/state')).data.revision,rev);
+ await c('/api/users',{method:'POST',body:{username:'editor',password:pass,role:'editor'}});const ed=client(app.url);await ed('/api/login',{method:'POST',body:{username:'editor',password:pass}});
+ const reopened={...doc,periodEvents:[...doc.periodEvents,{...e,id:'open',action:'reopen',reason:'정정 필요'}]};assert.equal((await ed('/api/state',{method:'PUT',body:{revision:rev,state:reopened}})).status,400);await commit(reopened);
+ const cancelled=cancelImportBatch(doc,'batch','editor','잘못된 청구서');const result=await ed('/api/state',{method:'PUT',body:{revision:rev,state:cancelled}});assert.equal(result.status,200,JSON.stringify(result.data));rev=result.data.revision;doc=cancelled;
+ assert.equal((await put({...doc,periodEvents:[...doc.periodEvents,{...e,id:'again'}]})).status,400);
+ const backup=(await c('/api/backup')).data;assert.equal(backup.state.importBatches[0].cancelled.actor,'editor');assert.equal(backup.state.reconciliations.length,1);assert.equal((await c('/api/restore',{method:'POST',body:{revision:rev,currentPassword:pass,backup}})).status,200);
+ }finally{await app.close();}
+});

@@ -307,7 +307,7 @@ def main():
 
             assert page.evaluate("JSON.parse(localStorage.getItem('scm-logistics-review-v1')).costs.length")==110
             page.locator('[data-edit]').nth(18).click();page.fill('#record-edit [name=exchangeRate]','1400');page.click('#record-edit button[type=submit]')
-            page.wait_for_selector('#record-edit',state='detached');assert '140,000' in page.locator('tbody').inner_text()
+            page.wait_for_selector('#record-edit',state='detached');assert '140,000' in page.locator('#cost-records-table tbody').inner_text()
             with page.expect_download() as download:page.click('#template')
             template=temp/'template.xlsx';download.value.save_as(str(template));filled=temp/'filled.xlsx'
             generator="""import ExcelJS from 'exceljs';
