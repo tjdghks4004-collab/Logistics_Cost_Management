@@ -13,10 +13,19 @@ export function planCenterCharges(draft,context){
  if(!errors.length)try{assertNoNewCostDuplicates([...(context.costs||[]),...entries],context.costs||[]);}catch(error){errors.push(error.message);}return {entries,errors};
 }
 export function parseCenterChargePaste(text,draft,context){
- const rows=[],errors=[],lines=String(text||'').replace(/^\uFEFF/,'').split(/\r?\n/).filter(s=>s.trim()),direct=draft.mode==='amount';
- if(lines.length>1001)return {rows,errors:['한 번에 최대 1,000행까지 붙여넣으세요.']};
+ const rows=[],errors=[],resolutions=[],lines=String(text||'').replace(/^\uFEFF/,'').split(/\r?\n/).filter(s=>s.trim()),direct=draft.mode==='amount',swapped=draft.pasteOrder==='value-first';
+ if(lines.length>1001)return {rows,resolutions,errors:['한 번에 최대 1,000행까지 붙여넣으세요.']};
  const clean=v=>v.replaceAll(',','').replace(/^₩/,'').replace(/(?:원|박스|회|개|건)$/,'').trim();
  for(let i=0;i<lines.length;i++){const cols=lines[i].split('\t').map(s=>s.trim());if(i===0&&['매장','매장코드','매장명'].includes(cols[0]))continue;
-  try{if(cols.length!==(direct?2:3))throw Error(direct?'매장 / 총비용 두 열을 붙여넣으세요.':'매장 / 수량 / 단가(또는 총비용) 세 열을 붙여넣으세요.');const store=resolveStoreSearch(cols[0],context.stores,{allowKeyword:true});rows.push({storeId:store.id,groupId:store.groupId||'',quantity:direct?'':clean(cols[1]),price:draft.mode==='calculated'?clean(cols[2]):'',amount:direct?clean(cols[1]):draft.mode==='reverse'?clean(cols[2]):'',memo:''});}catch(error){errors.push(`${i+1}행: ${error.message}`);}}
- if(!rows.length&&!errors.length)errors.push('붙여넣을 자료를 입력하세요.');if(!errors.length)errors.push(...planCenterCharges({...draft,rows},context).errors);return {rows,errors};
+  const resolution={index:i,input:cols[0],values:cols.slice(1),storeId:'',error:''};resolutions.push(resolution);
+  try{
+   if(cols.length!==(direct?2:3))throw Error(direct?'매장 / 총비용 두 열을 붙여넣으세요.':'선택한 열 순서에 맞는 세 열을 붙여넣으세요.');
+   const override=draft.pasteStores?.[i];let store;
+   if(override&&override.input===cols[0]){store=context.stores.find(s=>s.id===override.storeId&&s.active);if(!store)throw Error('지정한 매장이 사용 중지·삭제되었습니다. 다시 선택하세요.');resolution.manual=true;}
+   else store=resolveStoreSearch(cols[0],context.stores,{allowKeyword:true});
+   resolution.storeId=store.id;const quantity=direct?'':clean(cols[swapped?2:1]),value=clean(cols[direct||swapped?1:2]);
+   rows.push({storeId:store.id,groupId:store.groupId||'',quantity,price:draft.mode==='calculated'?value:'',amount:direct?clean(cols[1]):draft.mode==='reverse'?value:'',memo:''});
+  }catch(error){resolution.error=error.message;errors.push(`${i+1}행: ${error.message}`);}
+ }
+ if(!rows.length&&!errors.length)errors.push('붙여넣을 자료를 입력하세요.');if(!errors.length)errors.push(...planCenterCharges({...draft,rows},context).errors);return {rows,errors,resolutions};
 }

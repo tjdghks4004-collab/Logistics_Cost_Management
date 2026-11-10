@@ -25,3 +25,11 @@ test('typed pasted names resolve a unique bracketed keyword to canonical store I
  assert.equal(planCenterCharges({...draft,rows:parsed.rows},context).entries[0].amount,600000);
  const ambiguous={...context,stores:[...context.stores,{...context.stores[0],id:'s2',code:'C002',name:'Agent _예스아시아(해상)'}]};assert.match(parseCenterChargePaste('예스아시아(항공)\t500\t1200',draft,ambiguous).errors[0],/후보/);
 });
+test('paste column order can be reversed; unresolved names can be explicitly mapped without stale or inactive overrides',()=>{
+ const d={...draft,type:'truck',mode:'reverse',unit:'건',pasteOrder:'value-first'},text='캄보디아 토브\t66,000\t1';
+ const first=parseCenterChargePaste(text,d,ctx);assert.ok(first.errors.length);assert.equal(first.resolutions[0].input,'캄보디아 토브');
+ const mapped={...d,pasteStores:{0:{input:'캄보디아 토브',storeId:'s'}}};const result=parseCenterChargePaste(text,mapped,ctx);assert.deepEqual(result.errors,[]);assert.equal(result.rows[0].amount,'66000');assert.equal(result.rows[0].quantity,'1');assert.equal(result.resolutions[0].manual,true);assert.equal(planCenterCharges({...d,rows:result.rows},ctx).entries[0].price,66000);
+ assert.ok(parseCenterChargePaste('다른 매장\t66000\t1',mapped,ctx).errors.length);assert.ok(parseCenterChargePaste(text,mapped,{...ctx,stores:ctx.stores.map(s=>({...s,active:false}))}).errors.length);
+ assert.ok(parseCenterChargePaste('캄보디아 토브\t66000\t1\n미확인 매장\t100\t1',mapped,ctx).errors.length);
+ const calculated=parseCenterChargePaste('C001\t1200\t500',{...draft,pasteOrder:'value-first'},ctx);assert.deepEqual(calculated.errors,[]);assert.equal(planCenterCharges({...draft,rows:calculated.rows},ctx).entries[0].amount,600000);
+});
