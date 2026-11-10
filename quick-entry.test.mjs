@@ -14,3 +14,14 @@ test('quick counts exclude cost amounts and errors block unknown stores, malform
  const first=planQuickEntry('0001\t100',settings,ctx).entries[0];assert.ok(planQuickEntry('0001\t100',settings,{...ctx,costs:[first]}).errors.length);
  assert.ok(planQuickEntry('0001\t100',{...settings,recordType:'count',account:'공통'},ctx).errors.length);
 });
+test('pasted store keywords ignore Agent prefix and bracketed notes but reject ambiguous, short and inactive matches',()=>{
+ const stores=[{id:'yes',code:'C101',name:'Agent _예스아시아',groupId:'g1',active:true},{id:'other',code:'C102',name:'마켓컬리',active:true},{id:'old',code:'C103',name:'Agent _예스아시아(해상)',active:false}];
+ for(const value of ['예스아시아','예스아시아(항공)','예스 아시아（항공）','예스아시아[항공]','Agent_예스아시아(항공)','컬리'])assert.equal(resolveStoreSearch(value,stores,{allowKeyword:true}).id,value==='컬리'?'other':'yes');
+ assert.throws(()=>resolveStoreSearch('예스아시아(항공)',stores));assert.throws(()=>resolveStoreSearch('예',stores,{allowKeyword:true}));assert.throws(()=>resolveStoreSearch('(항공)',stores,{allowKeyword:true}));assert.throws(()=>resolveStoreSearch('C10',stores,{allowKeyword:true}));
+ const ambiguous=[...stores,{id:'yes2',code:'C104',name:'Agent _예스아시아(선박)',active:true}];
+ assert.throws(()=>resolveStoreSearch('예스아시아(항공)',ambiguous,{allowKeyword:true}),/후보가 여러 개.*C101.*C104/);
+ assert.equal(resolveStoreSearch('C101',ambiguous,{allowKeyword:true}).id,'yes');
+ const variants=[{id:'air',code:'A',name:'Agent _예스아시아(항공)',active:true},{id:'sea',code:'B',name:'Agent _예스아시아(해상)',active:true}];
+ assert.equal(resolveStoreSearch('예스아시아(항공)',variants,{allowKeyword:true}).id,'air');assert.throws(()=>resolveStoreSearch('예스아시아',variants,{allowKeyword:true}),/후보/);
+ const plan=planQuickEntry('예스아시아(항공)\t125000',settings,{...ctx,stores});assert.deepEqual(plan.errors,[]);assert.equal(plan.entries[0].storeId,'yes');assert.equal(plan.entries[0].groupId,'g1');
+});

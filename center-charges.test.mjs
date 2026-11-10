@@ -19,3 +19,9 @@ test('paste type/mode controls column meaning; zeros preserved, partial invalid 
  assert.ok(planCenterCharges(draft,{...ctx,costs:planCenterCharges(draft,ctx).entries}).errors.length);
  assert.deepEqual(centerChargeCategories('truck','B2B',ctx.masters),['용차임']);assert.deepEqual(centerChargeCategories('truck','B2B',ctx.masters.map(m=>({...m,active:false}))),[]);
 });
+test('typed pasted names resolve a unique bracketed keyword to canonical store ID and group',()=>{
+ const context={...ctx,stores:[{...ctx.stores[0],name:'Agent _예스아시아'}]};
+ const parsed=parseCenterChargePaste('예스아시아(항공)\t500\t1200',draft,context);assert.deepEqual(parsed.errors,[]);assert.equal(parsed.rows[0].storeId,'s');assert.equal(parsed.rows[0].groupId,'g');
+ assert.equal(planCenterCharges({...draft,rows:parsed.rows},context).entries[0].amount,600000);
+ const ambiguous={...context,stores:[...context.stores,{...context.stores[0],id:'s2',code:'C002',name:'Agent _예스아시아(해상)'}]};assert.match(parseCenterChargePaste('예스아시아(항공)\t500\t1200',draft,ambiguous).errors[0],/후보/);
+});
