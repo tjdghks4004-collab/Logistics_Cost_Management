@@ -201,7 +201,7 @@ def main():
             page.reload();page.wait_for_selector('.kpi')
             choose('category-parent','센터 보관비')
             assert page.locator('#category option[value="보관료"]').count()==1
-            page.click('[data-view=entry]')
+            page.click('[data-view=entry]');page.click('[data-center-input=general]')
             assert page.locator('[data-u=category] optgroup[label="포워딩"] option[value="해상 운송료"]').count()==1
             page.evaluate("value=>localStorage.setItem('scm-logistics-review-v1',value)",before_master)
             page.reload();page.wait_for_selector('.kpi')
@@ -276,11 +276,11 @@ def main():
             page.evaluate("value=>localStorage.setItem('scm-logistics-review-v1',value)",original)
             page.reload();page.wait_for_selector('.kpi')
             assert page.locator('nav [data-view=tradeEntry]').count()==0
-            page.click('nav [data-view=tradeReport]')
-            assert page.locator('#title').inner_text()=='수출입 비용 관리'
+            page.click('nav [data-view=entry]');page.click('[data-cost-section=tradeReport]')
+            assert page.locator('#title').inner_text()=='비용 관리'
             assert page.locator('#trade-tab-report').get_attribute('aria-selected')=='true'
             page.click('#add')
-            assert page.locator('nav [data-view=tradeReport]').evaluate("el=>el.classList.contains('active')")
+            assert page.locator('nav [data-view=entry]').evaluate("el=>el.classList.contains('active')")
             page.fill('[name=shipment]','DRAFT-PRESERVED')
             page.click('#trade-tab-report');page.click('#trade-tab-entry')
             assert page.locator('[name=shipment]').input_value()=='DRAFT-PRESERVED'

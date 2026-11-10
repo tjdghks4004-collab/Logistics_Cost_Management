@@ -32,21 +32,21 @@ def main():
             page.wait_for_selector('#start-empty');page.click('#start-empty');page.wait_for_selector('.kpi')
             def workspace():return page.evaluate("async()=>{const r=await fetch('/api/state');if(!r.ok)throw Error('state');return (await r.json()).state}")
             state=workspace();assert state['costs']==[] and state['stores']==[] and state['centerMasters']==[]
-            page.click('[data-view=entry]');assert '물류센터를 먼저 등록' in page.locator('#content').inner_text()
+            page.click('[data-view=entry]');page.click('[data-center-input=general]');assert '물류센터를 먼저 등록' in page.locator('#content').inner_text()
             page.click('[data-view=locations]');page.fill('#center-add [name=name]','검증센터');page.click('#center-add button')
             page.wait_for_function("document.querySelector('[data-center-country]')!==null")
             page.click('[data-view=stores]');page.fill('#group-add [name=name]','SCM 관리그룹');page.click('#group-add button')
             page.wait_for_function("[...document.querySelector('#store-add [name=groupId]').options].some(o=>o.textContent==='SCM 관리그룹')")
             page.fill('#store-add [name=code]','SCM001');page.fill('#store-add [name=name]','검증매장');page.click('#store-add button')
             page.wait_for_selector('[data-store-record]');store=workspace()['stores'][0]['id']
-            page.click('[data-view=entry]')
+            page.click('[data-view=entry]');page.click('[data-center-input=general]')
             page.fill('#unified-entry [name=month]','2026-10')
             page.fill('[data-store-search]','SCM001');page.press('[data-store-search]','Tab');page.select_option('[data-u=category]','B2C 출고비')
             page.fill('[data-u=quantity]','100');page.fill('[data-u=price]','500');page.click('#unified-add')
             page.select_option('[data-unified-row="1"] [data-u=recordType]','count');page.fill('[data-unified-row="1"] [data-store-search]','검증매장');page.press('[data-unified-row="1"] [data-store-search]','Tab');page.fill('[data-unified-row="1"] [data-u=quantity]','100')
             page.click('#unified-entry button[type=submit]');page.wait_for_selector('[data-edit]');assert len(workspace()['costs'])==2
             # The manual path must enforce the same duplicate rule as file imports.
-            page.click('[data-view=entry]');page.fill('#unified-entry [name=month]','2026-10')
+            page.click('[data-view=entry]');page.click('[data-center-input=general]');page.fill('#unified-entry [name=month]','2026-10')
             page.fill('[data-store-search]','SCM001');page.press('[data-store-search]','Tab');page.select_option('[data-u=category]','B2C 출고비')
             page.fill('[data-u=quantity]','100');page.fill('[data-u=price]','500')
             assert page.evaluate("()=>{const e=new Event('beforeunload',{cancelable:true});window.dispatchEvent(e);return e.defaultPrevented}")
@@ -167,9 +167,9 @@ def main():
             page.fill('[name=username]','scm_admin');page.fill('[name=password]',password);page.click('#login-form button');page.wait_for_selector('.kpi');page.locator('#month').evaluate("el=>{el.value='2026-10';el.dispatchEvent(new Event('change'))}");assert page.locator('.kpi .value').first.inner_text()=='₩52,000';assert len(workspace()['sales'])==3
             page.click('#logout');page.wait_for_selector('#login-form')
             page.fill('[name=username]','scm_viewer');page.fill('[name=password]',password);page.click('#login-form button');page.wait_for_selector('.kpi')
-            assert page.locator('[data-view=entry]').is_hidden() and page.locator('#add').is_hidden()
+            assert page.locator('[data-view=entry]').is_visible() and page.locator('#add').is_hidden()
             assert page.evaluate("async()=>(await fetch('/api/backup')).status")==403
-            page.click('nav [data-view=tradeReport]')
+            page.click('nav [data-view=entry]');page.click('[data-cost-section=tradeReport]')
             assert page.locator('#trade-tab-report').is_enabled()
             assert page.locator('#trade-tab-entry').count()==0
             assert page.locator('#trade-query').is_enabled()

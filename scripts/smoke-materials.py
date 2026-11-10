@@ -18,7 +18,7 @@ def main():
    def state():return page.evaluate("async()=>(await (await fetch('/api/state')).json()).state")
    login('materialadmin');page.wait_for_selector('#start-empty');page.click('#start-empty');page.wait_for_selector('.kpi')
    page.click('nav [data-view=locations]');page.fill('#center-add [name=name]','부자재센터');page.click('#center-add button');page.wait_for_selector('[data-center-country]')
-   page.click('nav [data-view=commonEntry]');page.click('[data-material-tab=masters]')
+   page.click('nav [data-view=entry]');page.click('[data-cost-section=commonEntry]');page.click('[data-material-tab=masters]')
    page.fill('#material-item-form [name=code]','BOX-S');page.fill('#material-item-form [name=name]','택배박스 S');page.fill('#material-item-form [name=specification]','210×160×120 mm');page.fill('#material-item-form [name=flute]','B골');page.click('#material-item-form button[type=submit]');page.wait_for_selector('[data-material-edit]')
    item=state()['materials'][0]['id']
    for date,price in [('2026-01-01','226'),('2026-10-01','125')]:
@@ -32,28 +32,28 @@ def main():
    if os.environ.get('MATERIAL_SCREENSHOT'):page.screenshot(path=os.environ['MATERIAL_SCREENSHOT']+'-purchase.png',full_page=True)
    row=state()['costs'][0];original_id=row['id'];assert row['amount']==10000 and row['material']['vatAmount']==1000 and row['material']['totalAmount']==11000;assert row['center']=='부자재센터'
    page.click('nav [data-view=dashboard]');assert page.locator('.kpi .value').first.inner_text()=='₩10,000';assert '부자재 구매비' in page.locator('.donut-legend').inner_text()
-   page.click('nav [data-view=commonEntry]');page.click('[data-material-tab=masters]');page.click('[data-material-edit]');page.fill('#material-item-form [name=name]','택배박스 개정명');page.fill('#material-item-form [name=specification]','새 규격');page.click('#material-item-form button[type=submit]');page.wait_for_function("document.querySelector('#material-item-form [name=name]').value===''")
+   page.click('nav [data-view=entry]');page.click('[data-cost-section=commonEntry]');page.click('[data-material-tab=masters]');page.click('[data-material-edit]');page.fill('#material-item-form [name=name]','택배박스 개정명');page.fill('#material-item-form [name=specification]','새 규격');page.click('#material-item-form button[type=submit]');page.wait_for_function("document.querySelector('#material-item-form [name=name]').value===''")
    page.click('[data-material-tab=purchases]');assert '택배박스 S' in page.locator('#material-purchases').inner_text() and '210×160×120 mm' in page.locator('#material-purchases').inner_text()
    page.click('[data-material-purchase-edit]');page.fill('#material-purchase-form [name=quantity]','200');page.click('#material-purchase-form button[type=submit]');page.wait_for_function("document.querySelector('#material-purchase-form [name=quantity]').value===''")
    row=state()['costs'][0];assert row['amount']==20000 and row['material']['name']=='택배박스 S'
    # Master mapping drives dependent input options.
    page.click('nav [data-view=masters]');master=page.locator('tbody tr').filter(has=page.get_by_text('임가공비(세트포장 등)',exact=True));assert master.count()==1
    assert not master.locator('input[value="국제운송료"]').is_checked()
-   page.click('nav [data-view=tradeReport]');page.click('#trade-tab-entry');page.select_option('[data-u=category]','임가공비(세트포장 등)')
+   page.click('nav [data-view=entry]');page.click('[data-cost-section=tradeReport]');page.click('#trade-tab-entry');page.select_option('[data-u=category]','임가공비(세트포장 등)')
    assert '국제운송료' not in page.locator('[data-u=chargeGroup] option').all_text_contents()
    page.select_option('[data-u=chargeGroup]','출발지 비용');page.select_option('[data-u=category]','보관료') if page.locator('[data-u=category] option[value="보관료"]').count() else page.select_option('[data-u=category]','지급임차료')
    assert page.locator('[data-u=chargeGroup]').input_value()==''
    page.click('nav [data-view=masters]');master=page.locator('tbody tr').filter(has=page.get_by_text('임가공비(세트포장 등)',exact=True))
    master.locator('summary').click()
    with page.expect_response(lambda r:r.url.endswith('/api/state') and r.request.method=='PUT'):master.locator('input[value="국제운송료"]').check()
-   page.click('nav [data-view=tradeReport]');page.click('#trade-tab-entry');page.select_option('[data-u=category]','임가공비(세트포장 등)');assert '국제운송료' in page.locator('[data-u=chargeGroup] option').all_text_contents()
+   page.click('nav [data-view=entry]');page.click('[data-cost-section=tradeReport]');page.click('#trade-tab-entry');page.select_option('[data-u=category]','임가공비(세트포장 등)');assert '국제운송료' in page.locator('[data-u=chargeGroup] option').all_text_contents()
    # Backup includes both masters and immutable purchase snapshots.
    backup=page.evaluate("async()=>await (await fetch('/api/backup')).json()");assert len(backup['state']['materials'])==1 and len(backup['state']['materialPrices'])==2
    result=page.evaluate("""async b=>{const me=await(await fetch('/api/me')).json(),s=await(await fetch('/api/state')).json();const r=await fetch('/api/restore',{method:'POST',headers:{'Content-Type':'application/json','X-CSRF-Token':me.csrf},body:JSON.stringify({backup:b.backup,revision:s.revision,currentPassword:b.password})});return r.status;}""",{'backup':backup,'password':password});assert result==200
    page.reload();page.wait_for_selector('.kpi');assert state()['costs'][0]['material']['name']=='택배박스 S'
    # An editor can purchase but cannot change material masters.
    result=page.evaluate("""async password=>{const me=await(await fetch('/api/me')).json();return (await fetch('/api/users',{method:'POST',headers:{'Content-Type':'application/json','X-CSRF-Token':me.csrf},body:JSON.stringify({username:'materialeditor',password,role:'editor'})})).status;}""",password);assert result==201
-   page.click('#logout');page.wait_for_selector('#login-form');login('materialeditor');page.wait_for_selector('.kpi');page.click('nav [data-view=commonEntry]');assert page.locator('[data-material-tab=masters]').count()==0
+   page.click('#logout');page.wait_for_selector('#login-form');login('materialeditor');page.wait_for_selector('.kpi');page.click('nav [data-view=entry]');page.click('[data-cost-section=commonEntry]');assert page.locator('[data-material-tab=masters]').count()==0
    status=page.evaluate("""async()=>{const me=await(await fetch('/api/me')).json(),s=await(await fetch('/api/state')).json();s.state.materials[0].name='forbidden';return(await fetch('/api/state',{method:'PUT',headers:{'Content-Type':'application/json','X-CSRF-Token':me.csrf},body:JSON.stringify({revision:s.revision,state:s.state})})).status;}""");assert status==403
    page.fill('#material-purchase-form [name=purchaseDate]','2026-11-02');page.select_option('#material-purchase-form [name=materialId]',item);page.fill('#material-purchase-form [name=quantity]','10');page.fill('#material-purchase-form [name=unitPrice]','110');page.click('#material-purchase-form button[type=submit]');page.wait_for_function('document.querySelectorAll("[data-material-purchase-edit]").length===2')
    assert sum(r['amount'] for r in state()['costs'])==21000
