@@ -29,3 +29,15 @@ export function parseCenterChargePaste(text,draft,context){
  }
  if(!rows.length&&!errors.length)errors.push('붙여넣을 자료를 입력하세요.');if(!errors.length)errors.push(...planCenterCharges({...draft,rows},context).errors);return {rows,errors,resolutions};
 }
+// Combine pending paste with ordinary rows without mutating either draft; confirmation comes later.
+export function prepareCenterChargeSave(draft,context){
+ const rows=(draft.rows||[]).filter(r=>['quantity','price','amount','memo','storeQuery'].some(k=>String(r[k]??'').trim()));
+ const paste=String(draft.paste||'').trim()?parseCenterChargePaste(draft.paste,draft,context):null;
+ if(paste?.errors.length)return {entries:[],rows,errors:paste.errors.map(e=>'붙여넣기 '+e),paste};
+ const combined=[...rows,...(paste?.rows||[])],checked=planCenterCharges({...draft,rows:combined},context);return {...checked,rows:combined,paste};
+}
+export function editCenterChargePasteValue(text,index,column,value){
+ const lines=String(text||'').replace(/^\uFEFF/,'').split(/\r?\n/).filter(s=>s.trim());
+ if(!Number.isInteger(index)||index<0||index>=lines.length||![1,2].includes(column))throw Error('수정할 붙여넣기 위치를 확인하세요.');
+ const cols=lines[index].split('\t');if(column>=cols.length)throw Error('열 개수가 맞지 않습니다. 원문 또는 열 순서를 확인하세요.');cols[column]=String(value);lines[index]=cols.join('\t');return lines.join('\n');
+}

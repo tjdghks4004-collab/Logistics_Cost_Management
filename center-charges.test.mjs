@@ -33,3 +33,14 @@ test('paste column order can be reversed; unresolved names can be explicitly map
  assert.ok(parseCenterChargePaste('캄보디아 토브\t66000\t1\n미확인 매장\t100\t1',mapped,ctx).errors.length);
  const calculated=parseCenterChargePaste('C001\t1200\t500',{...draft,pasteOrder:'value-first'},ctx);assert.deepEqual(calculated.errors,[]);assert.equal(planCenterCharges({...draft,rows:calculated.rows},ctx).entries[0].amount,600000);
 });
+test('pending paste is included exactly once at save and preview numeric edits preserve mapped stores',async()=>{
+ const {prepareCenterChargeSave,editCenterChargePasteValue}=await import('./center-charges.mjs');
+ let d={...draft,type:'truck',mode:'reverse',unit:'건',rows:[{storeId:'',amount:'',quantity:'',price:''}],pasteOrder:'value-first',paste:'별도명\t66000\t1',pasteStores:{0:{input:'별도명',storeId:'s'}}};
+ d.paste=editCenterChargePasteValue(d.paste,0,1,'77000');d.paste=editCenterChargePasteValue(d.paste,0,2,'2');const before=structuredClone(d),ready=prepareCenterChargeSave(d,ctx);assert.deepEqual(ready.errors,[]);assert.equal(ready.entries.length,1);assert.equal(ready.entries[0].amount,77000);assert.equal(ready.entries[0].quantity,2);assert.equal(ready.entries[0].price,38500);assert.equal(ready.entries[0].storeId,'s');assert.deepEqual(d,before);
+ const applied={...d,rows:ready.rows,paste:'',pasteStores:{}};assert.equal(prepareCenterChargeSave(applied,ctx).entries.length,1);
+ const missing={...d,pasteStores:{}};assert.match(prepareCenterChargeSave(missing,ctx).errors[0],/붙여넣기/);assert.equal(prepareCenterChargeSave(missing,ctx).entries.length,0);
+ assert.ok(prepareCenterChargeSave({...d,rows:[ready.rows[0]]},ctx).errors.length);
+ const zero={...d,paste:editCenterChargePasteValue(d.paste,0,1,'0')};assert.equal(prepareCenterChargeSave(zero,ctx).entries[0].amount,0);
+ assert.throws(()=>editCenterChargePasteValue(d.paste,0,0,'other'));assert.throws(()=>editCenterChargePasteValue(d.paste,5,1,'1'));
+ const direct={...d,mode:'amount',paste:'별도명\t77000'};assert.equal(prepareCenterChargeSave(direct,ctx).entries[0].amount,77000);
+});
