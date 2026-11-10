@@ -27,7 +27,7 @@ async function api(path,options={}){
 }
 `;
 const stripModules=source=>source.replace(/^import .*?;\s*$/gm,'').replace(/^export\s+/gm,'');
-const app=['controls.mjs','calc.mjs','search.mjs','units.mjs','materials.mjs','periods.mjs','domain.mjs','import-data.mjs','excel.mjs','store-import.mjs','sales.mjs','cost-tabs.mjs','quick-entry.mjs','outbound.mjs','center-charges.mjs','app.mjs'].map(name=>stripModules(read(name))).join('\n');
+const app=['controls.mjs','dashboard-analysis.mjs','calc.mjs','search.mjs','units.mjs','materials.mjs','periods.mjs','domain.mjs','import-data.mjs','excel.mjs','store-import.mjs','sales.mjs','cost-tabs.mjs','quick-entry.mjs','outbound.mjs','center-charges.mjs','app.mjs'].map(name=>stripModules(read(name))).join('\n');
 const tail=`
 document.querySelector('#review-reset').onclick=()=>{if(confirm('이 검토본의 예시 데이터를 처음 상태로 되돌릴까요?')){localStorage.removeItem(reviewStorageKey);location.reload();}};
 `;

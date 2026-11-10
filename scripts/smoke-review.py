@@ -41,7 +41,7 @@ def main():
             assert page.locator('[role=tab][data-dashboard-tab]').count()==5
             assert page.locator('[role=tabpanel]:visible').count()==1
             assert page.locator('#dashboard-panel-overview').is_visible()
-            assert not page.locator('.period-help').evaluate('e=>e.open')
+            assert not page.locator('.dashboard-controls > .period-help').evaluate('e=>e.open')
             initial_kpi=page.locator('.kpi .value').first.inner_text()
             for tab in ['comparison','efficiency','centers','stores','overview']:
                 page.click(f'[data-dashboard-tab={tab}]')

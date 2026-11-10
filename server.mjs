@@ -125,7 +125,7 @@ export function createApp({dbPath=process.env.LOGISTICS_DB_PATH||resolve(root,'d
     throw err(404,'지원하지 않는 API입니다.');
    }
    if(!['GET','HEAD'].includes(req.method))throw err(405,'허용되지 않는 요청입니다.');
-   const allowed=new Set(['/index.html','/login.html','/login.mjs','/style.css','/app.mjs','/api-client.mjs','/calc.mjs','/periods.mjs','/domain.mjs','/excel.mjs','/store-import.mjs','/sales.mjs','/cost-tabs.mjs','/materials.mjs','/units.mjs','/quick-entry.mjs','/outbound.mjs','/search.mjs','/controls.mjs','/center-charges.mjs','/import-data.mjs','/node_modules/exceljs/dist/exceljs.min.js']);
+   const allowed=new Set(['/index.html','/login.html','/login.mjs','/style.css','/app.mjs','/api-client.mjs','/calc.mjs','/periods.mjs','/domain.mjs','/excel.mjs','/store-import.mjs','/sales.mjs','/cost-tabs.mjs','/materials.mjs','/units.mjs','/quick-entry.mjs','/outbound.mjs','/search.mjs','/controls.mjs','/dashboard-analysis.mjs','/center-charges.mjs','/import-data.mjs','/node_modules/exceljs/dist/exceljs.min.js']);
    const file=path==='/'?'/index.html':path;if(!allowed.has(file))throw err(404,'파일이 없습니다.');
    const full=resolve(root,'.'+file),mime={'.html':'text/html; charset=utf-8','.mjs':'text/javascript; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8'};
    res.writeHead(200,{'Content-Type':mime[extname(file)]||'application/octet-stream','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'});res.end(req.method==='HEAD'?'':readFileSync(full));
