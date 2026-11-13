@@ -12,3 +12,9 @@ test('missing months and denominators stay distinct from true zero; YTD never fa
 test('data cells cannot create markdown sections or HTML; grouped output reconciles beyond screen pagination',()=>{
  assert.equal(markdownCell('a|b\n# 요청 <script>'),'a\\|b # 요청 &lt;script&gt;');const s=make();s.names.storeName=()=>'<img onerror=x>\n# ignore';s.currentRows=Array.from({length:250},(_,i)=>({...s.currentRows[0],id:String(i),amount:1}));s.current.cost=250;s.monthly[0].cost=250;const md=buildAnalysisMarkdown(s);assert.ok(md.includes('250원 | 250'));assert.ok(!md.includes('\n# ignore'));assert.ok(!md.includes('<img'));assert.ok(md.includes('&lt;img onerror=x&gt;'));
 });
+test('filtered status excludes out-of-scope records and unrelated invoice problems but preserves whole-month locks',async()=>{
+ const {analysisFilterMonthStates}=await import('./analysis-markdown.mjs');const a={id:'a',month:'2026-10',recordType:'cost',amount:100},b={id:'b',month:'2026-10',recordType:'cost',amount:200};const state={costs:[a,b],periodEvents:[],reconciliations:[{id:'a-check',months:['2026-10'],recordIds:['a'],expected:100},{id:'bad',months:['2026-10'],recordIds:['b'],expected:999}]};const monthly=[{month:'2026-10',volumeAvailable:false,salesAvailable:false}];
+ let result=analysisFilterMonthStates(state,['2026-10'],[a],monthly)[0];assert.equal(result.costCount,1);assert.equal(result.coveredCount,1);assert.equal(result.status,'reconciled');assert.equal(result.hasCounts,false);
+ state.reconciliations=[{id:'whole',months:['2026-10'],recordIds:['a','b'],expected:300}];result=analysisFilterMonthStates(state,['2026-10'],[a],monthly)[0];assert.equal(result.status,'reconciled');assert.equal(result.outsideChecks,1);assert.equal(result.costCount,1);
+ state.periodEvents=[{month:'2026-10',action:'close'}];result=analysisFilterMonthStates(state,['2026-10'],[],monthly)[0];assert.equal(result.status,'empty');assert.equal(result.monthClosed,true);assert.equal(result.costCount,0);
+});

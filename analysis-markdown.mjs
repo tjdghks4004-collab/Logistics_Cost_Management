@@ -1,3 +1,4 @@
+import {lockedMonths,reconciliationResult} from './controls.mjs';
 import {dashboardChargeMetrics,dashboardCostIncreases} from './dashboard-analysis.mjs';
 import {categoryParentOf,domainLabels} from './domain.mjs';
 export function markdownCell(value){return String(value??'—').replace(/[\r\n\t]+/g,' ').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\\/g,'\\\\').replace(/([|`*_])/g,'\\$1');}
@@ -31,7 +32,7 @@ export function buildAnalysisMarkdown(snapshot){
  '- 비용 항목 필터는 비용에 적용합니다. 출고 건수·매출은 같은 월과 허용되는 귀속 범위를 사용하되 비용 항목별로 임의 배분하지 않습니다.',
  '- ERP 판매수량을 출고 건수로 사용하지 않습니다. 센터·국가·업무 등 매출 귀속 범위가 맞지 않으면 물류비율을 계산하지 않습니다.',
  '- 센터·그룹 공통 출고 건수가 있으면 하위 매장 건수와 중복 합산하지 않습니다. 아래 출고 건수는 대시보드와 같은 우선 적용 기준입니다.',
- '- 상태 표시는 월 전체 센터·업무 기준입니다. 대조 완료는 등록 비용이 대조에 연결되어 일치한다는 뜻이며 입력 누락이 없다는 보증은 아닙니다.',
+ snapshot.statusScope==='filtered'?'- 입력·대조 상태와 비용 수는 현재 필터 범위 기준입니다. 마감 잠금만 월 전체 기준입니다. 관련 청구서가 필터 밖의 비용도 포함하면 대조 결과는 원본 청구서 전체 합계 기준이며 선택 범위만의 청구액으로 해석하지 마세요.':'- 상태 표시는 월 전체 센터·업무 기준입니다. 대조 완료는 등록 비용이 대조에 연결되어 일치한다는 뜻이며 입력 누락이 없다는 보증은 아닙니다.',
  '- 아래 집계는 조회 조건에 맞는 등록분 전체이며 목록 페이지나 현재 대시보드 탭에 의해 잘리지 않습니다. 원본 메모·문서번호·계정·임시 저장 자료는 포함하지 않습니다.',
  '', '# 데이터', '## 1. 주요 지표',analysisTable(['지표','조회 기간','비교 기간'],[
  ['총비용',cost(currentRows,'current',current.cost),period.previous.length?cost(previousRows,'previous',previous.cost):'비교 없음'],
@@ -42,7 +43,7 @@ export function buildAnalysisMarkdown(snapshot){
  ['총비용 증감',comparable?analysisMoney(current.cost-previous.cost):'— (비교 없음 또는 월 자료 부족)',comparable&&previous.cost>0?analysisNumber((current.cost/previous.cost-1)*100)+'%':'증감률 미계산'],
  ['등록 비용 원본 수',costRows(currentRows).length+'건',costRows(previousRows).length+'건']]),
  '', '## 2. 월별 비용·출고 건수·매출',analysisTable(['기간','월','등록 비용','출고 건수','매출'],monthly.map(r=>[r.side==='current'?'조회':'비교',r.month,r.costAvailable?analysisMoney(r.cost):'미등록 (0원으로 간주 금지)',r.volumeAvailable?analysisNumber(r.volume)+'건':'미등록',r.salesAvailable?analysisMoney(r.sales):'미등록 또는 범위 불일치'])),
- '', '## 3. 입력·대조·마감 상태 (월 전체 기준)',analysisTable(['월','상태','등록 비용 수','대조 연결 비용 수','출고 건수 자료','매출 자료'],monthStates.map(r=>[r.month,statusNames[r.status],r.costCount,r.coveredCount,r.hasCounts?'등록':'미등록',r.hasSales?'등록':'미등록'])),
+ '', snapshot.statusScope==='filtered'?'## 3. 입력·대조 상태 (현재 필터 기준)':'## 3. 입력·대조·마감 상태 (월 전체 기준)',analysisTable(snapshot.statusScope==='filtered'?['월','선택 범위 상태','등록 비용 수','대조 연결 비용 수','출고 건수 자료','매출 자료','월 전체 잠금','대조 범위 주의']:['월','상태','등록 비용 수','대조 연결 비용 수','출고 건수 자료','매출 자료'],monthStates.map(r=>[r.month,statusNames[r.status],r.costCount,r.coveredCount,r.hasCounts?'등록':'미등록 또는 범위 불일치',r.hasSales?'등록':'미등록 또는 범위 불일치',...(snapshot.statusScope==='filtered'?[r.monthClosed?'마감':'미마감',r.outsideChecks?'필터 밖 비용이 포함된 원본 청구서 전체 대조':'선택 범위 내 대조']:[])])),
  ];
  for(const [side,rows] of [['조회',currentRows],['비교',previousRows]]){
   if(side==='비교'&&!period.previous.length)continue;
@@ -56,4 +57,11 @@ export function buildAnalysisMarkdown(snapshot){
  if(!comparable)out.push('비교 없는 기간 또는 조회·비교 월 비용 자료 부족으로 증가 순위를 계산하지 않습니다.');
  else for(const kind of ['item','store'])out.push('',kind==='item'?'### 항목':'### 매장',analysisTable(['항목·매장','조회 비용','비교 비용','증가액','비교 주의'],dashboardCostIncreases(currentRows,previousRows,kind).map(g=>{const label=kind==='item'?g.key:(()=>{const [storeId,groupId]=JSON.parse(g.key);return names.storeCode(storeId)+' · '+names.storeName(storeId)+' / '+names.group(groupId);})();return [label,analysisMoney(g.current),g.baselineMissing?'이력 없음':analysisMoney(g.previous),analysisMoney(g.delta),g.baselineMissing?'신규·비교 미등록 (실제 신규 확정 아님)':g.previous===0?'비교 금액 0':'등록 자료 기준'];})));
  return out.join('\n')+'\n';
+}
+
+export function analysisFilterMonthStates(state,months,selectedRows,monthly){
+ const closed=lockedMonths(state),selectedIds=new Set(selectedRows.filter(r=>r.recordType!=='count').map(r=>r.id));
+ const related=(state.reconciliations||[]).filter(c=>c.recordIds.some(id=>selectedIds.has(id))).map(check=>({check,result:reconciliationResult(check,state)}));
+ return months.map(month=>{const costs=selectedRows.filter(r=>r.month===month&&r.recordType!=='count'),ids=new Set(costs.map(r=>r.id)),checks=related.filter(c=>c.check.recordIds.some(id=>ids.has(id))),covered=new Set(checks.filter(c=>c.result.matched).flatMap(c=>c.check.recordIds)),coveredCount=costs.filter(r=>covered.has(r.id)).length,bad=checks.some(c=>!c.result.matched),complete=costs.length>0&&coveredCount===costs.length&&!bad,monthClosed=closed.has(month),m=monthly.find(r=>r.month===month);
+ return {month,status:!costs.length?'empty':monthClosed?'closed':bad?'review':complete?'reconciled':'entering',costCount:costs.length,coveredCount,hasCounts:!!m?.volumeAvailable,hasSales:!!m?.salesAvailable,monthClosed,outsideChecks:checks.filter(c=>c.check.recordIds.some(id=>!selectedIds.has(id))).length};});
 }
