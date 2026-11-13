@@ -1,5 +1,5 @@
 import {test} from 'node:test';import assert from 'node:assert/strict';
-import {planCenterCharges,parseCenterChargePaste,centerChargeCategories} from './center-charges.mjs';
+import {planCenterCharges,parseCenterChargePaste,centerChargeCategories,prepareCenterChargeSave} from './center-charges.mjs';
 const ctx={stores:[{id:'s',code:'C001',name:'마켓컬리',groupId:'g',active:true}],groups:[{id:'g',name:'B2B'}],countries:[{code:'KR',name:'대한민국'}],centerMasters:[{name:'A',countryCode:'KR'}],masters:[{name:'B2C 출고비',active:true},{name:'B2B 출고비',active:true},{name:'용차임',active:true},{name:'임가공비(라벨링)',active:true},{name:'작업A',parentCategory:'임가공비',active:true}],units:['원','BOX','건','EA'],costs:[]};
 const draft={type:'box',month:'2026-11',center:'A',account:'B2B',unit:'BOX',mode:'calculated',rows:[{storeId:'s',quantity:'500',price:'1200',amount:'',memo:''}]};
 test('typed costs map to existing categories, keep exact totals and never generate shipment counts',()=>{
@@ -43,4 +43,12 @@ test('pending paste is included exactly once at save and preview numeric edits p
  const zero={...d,paste:editCenterChargePasteValue(d.paste,0,1,'0')};assert.equal(prepareCenterChargeSave(zero,ctx).entries[0].amount,0);
  assert.throws(()=>editCenterChargePasteValue(d.paste,0,0,'other'));assert.throws(()=>editCenterChargePasteValue(d.paste,5,1,'1'));
  const direct={...d,mode:'amount',paste:'별도명\t77000'};assert.equal(prepareCenterChargeSave(direct,ctx).entries[0].amount,77000);
+});
+test('one sheet contains manual and unresolved pasted rows; resolved fields, memos and row deletion stay aligned',async()=>{
+ const {inspectCenterChargeSheet,removeCenterChargePasteRow}=await import('./center-charges.mjs');const d={...draft,type:'truck',mode:'amount',rows:[{storeId:'s',amount:'100',memo:'직접'}],paste:'모르는 곳\t200\nC001\t300',pasteStores:{},pasteMemos:{1:{input:'C001',text:'붙여넣기 메모'}}};
+ let sheet=inspectCenterChargeSheet(d,ctx);assert.equal(sheet.rows.length,3);assert.deepEqual(sheet.progress,{total:3,valid:2,invalid:1});assert.equal(sheet.total,400);assert.equal(sheet.rows[1].source,'paste');
+ d.pasteStores={0:{input:'모르는 곳',storeId:'s'}};sheet=inspectCenterChargeSheet(d,ctx);assert.deepEqual(sheet.progress,{total:3,valid:3,invalid:0});assert.equal(sheet.total,600);assert.equal(prepareCenterChargeSave(d,ctx).entries[2].memo,'붙여넣기 메모');
+ const removed=removeCenterChargePasteRow(d,0);assert.equal(removed.paste,'C001\t300');assert.equal(removed.pasteMemos[0].input,'C001');assert.equal(prepareCenterChargeSave(removed,ctx).entries[1].memo,'붙여넣기 메모');assert.equal(d.paste,'모르는 곳\t200\nC001\t300');
+ const pending={...d,pastePending:{0:'아직 검색 중'}};assert.ok(prepareCenterChargeSave(pending,ctx).errors.length);
+ const duplicate={...draft,rows:[draft.rows[0],draft.rows[0]]};assert.equal(inspectCenterChargeSheet(duplicate,ctx).progress.invalid,1);
 });
