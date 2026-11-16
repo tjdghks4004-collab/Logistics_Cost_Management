@@ -1,0 +1,63 @@
+#!/usr/bin/env python3
+"""One editable sheet, automatic drafts, fixed cost columns, details and mobile layout."""
+from pathlib import Path
+import os,secrets,subprocess,tempfile,csv,io
+from playwright.sync_api import sync_playwright
+ROOT=Path(__file__).resolve().parents[1]
+def main():
+ with tempfile.TemporaryDirectory(prefix='scm-draft-ui-') as tmp,sync_playwright() as pw:
+  password=secrets.token_urlsafe(24)
+  code="import {createApp} from './server.mjs';const app=createApp({dbPath:process.env.LOGISTICS_DB_PATH,secureCookies:false});app.initializeAdmin({username:'draftadmin',password:process.env.SCM_TEST_PASSWORD});app.server.listen(0,'127.0.0.1',()=>console.log(app.server.address().port));process.on('SIGTERM',()=>app.close().then(()=>process.exit(0)));"
+  process=subprocess.Popen(['node','--input-type=module','-e',code],cwd=ROOT,env={**os.environ,'LOGISTICS_DB_PATH':str(Path(tmp)/'test.sqlite'),'SCM_TEST_PASSWORD':password},stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True)
+  try:
+   port=process.stdout.readline().strip();assert port.isdigit();browser=pw.chromium.launch(executable_path='/usr/bin/chromium',headless=True,args=['--no-sandbox']);page=browser.new_page(viewport={'width':1440,'height':1050});errors=[];page.on('pageerror',lambda e:errors.append(str(e)))
+   page.add_init_script("const actualConfirm=window.confirm.bind(window);window.confirm=m=>/^(등록을|수정을) 확정하시겠습니까/.test(String(m))?true:actualConfirm(m);")
+   def state():return page.evaluate("async()=>(await(await fetch('/api/state')).json()).state")
+   def drafts():return page.evaluate("async()=>(await(await fetch('/api/drafts')).json()).drafts")
+   page.goto('http://127.0.0.1:'+port);page.wait_for_selector('#login-form');page.fill('[name=username]','draftadmin');page.fill('[name=password]',password);page.click('#login-form button');page.wait_for_selector('#start-empty');page.click('#start-empty');page.wait_for_selector('.kpi')
+   page.click('nav [data-view=locations]');page.fill('#center-add [name=name]','임시저장센터');page.click('#center-add button');page.wait_for_selector('[data-center-country]')
+   page.click('nav [data-view=stores]');page.fill('#group-add [name=name]','온라인');page.click('#group-add button');page.wait_for_function("document.querySelector('#store-add [name=groupId]').options.length>0");page.fill('#store-add [name=code]','C001');page.fill('#store-add [name=name]','Agent _예스아시아');page.click('#store-add button');page.wait_for_selector('[data-store-record]')
+   assert page.evaluate("""async()=>{const me=await(await fetch('/api/me')).json(),d=await(await fetch('/api/state')).json(),g=d.state.groups[0].id;d.state.stores.push({id:'second',code:'C002',name:'마켓컬리',groupId:g,active:true});const base={month:'2026-11',domain:'center',recordType:'cost',countryCode:'KR',center:'임시저장센터',account:'공통',storeId:d.state.stores[0].id,groupId:g,category:'박스 출고비',unit:'원',quantity:null,price:null};d.state.costs=Array.from({length:140},(_,i)=>({...base,id:'row-'+i,amount:i===139?99999:i===1?2:i,memo:i===139?'숨은 행':i===0?'':'일반'+i}));d.state.sales=[{id:'low',month:'2026-11',storeId:d.state.stores[0].id,groupId:g,basis:'상품매출',source:'erp',sourceRows:1,amount:2},{id:'high',month:'2026-11',storeId:'second',groupId:g,basis:'상품매출',source:'erp',sourceRows:2,amount:10}];return(await fetch('/api/state',{method:'PUT',headers:{'Content-Type':'application/json','X-CSRF-Token':me.csrf},body:JSON.stringify({revision:d.revision,state:d.state})})).status;}""")==200
+   page.reload();page.wait_for_selector('.kpi');before=state()
+   def wait_table(selector):page.wait_for_selector(selector+' [data-table-control=sort]')
+   def sort(selector,key):page.locator(selector+' [data-table-control=sort][data-table-column="'+str(key)+'"]').click()
+   def filter_col(selector,key,text='',minimum=None,maximum=None,mode='contains'):
+    page.locator(selector+' [data-table-control=filter][data-table-column="'+str(key)+'"]').click();page.wait_for_selector('.table-filter-dialog[open]');page.select_option('.table-filter-dialog [name=mode]',mode);
+    if not page.locator('.table-filter-dialog [name=text]').is_disabled():page.fill('.table-filter-dialog [name=text]',text)
+    if minimum is not None:page.fill('.table-filter-dialog [name=min]',str(minimum))
+    if maximum is not None:page.fill('.table-filter-dialog [name=max]',str(maximum))
+    page.click('[data-table-filter-apply]');page.wait_for_function("!document.querySelector('.table-filter-dialog').open")
+   def reset(selector):page.locator(selector).locator('..').locator('[data-table-control=reset]').click();wait_table(selector)
+   page.click('nav [data-view=costs]');page.click('[data-cost-tab=all]');page.click('[data-cost-columns=detailed]');wait_table('#cost-records-table');assert page.locator('#cost-records-table tbody tr').count()==100
+   sort('#cost-records-table','amount');assert page.locator('#cost-records-table tbody tr').first.locator('[data-cost-column=amount]').inner_text()=='₩0';sort('#cost-records-table','amount');assert '99,999' in page.locator('#cost-records-table tbody tr').first.inner_text()
+   filter_col('#cost-records-table','memo','숨은');assert page.locator('#cost-records-table tbody tr').count()==1;assert page.locator('#cost-shown-total').inner_text()=='₩99,999'
+   with page.expect_download() as download:page.click('#export')
+   with Path(download.value.path()).open(encoding='utf-8-sig',newline='') as f:assert len(list(csv.DictReader(f)))==1
+   page.click('[data-cost-columns=compact]');assert page.locator('#cost-records-table tbody tr').count()==1;assert '필터: 메모' in page.locator('#cost-records-table').locator('..').inner_text();reset('#cost-records-table');assert page.locator('#cost-records-table tbody tr').count()==100
+   filter_col('#cost-records-table','amount',minimum=100,maximum=110);assert page.locator('#cost-records-table tbody tr').count()==11;reset('#cost-records-table');filter_col('#cost-records-table','amount',minimum=0,maximum=0);assert page.locator('#cost-records-table tbody tr').count()==1;reset('#cost-records-table');page.click('[data-cost-columns=detailed]');filter_col('#cost-records-table','memo',mode='empty');assert page.locator('#cost-records-table tbody tr').count()==1;reset('#cost-records-table');filter_col('#cost-records-table','store','없는매장');assert page.locator('#cost-records-table tbody tr').count()==0;reset('#cost-records-table')
+   page.click('[data-cost-tab=center]');page.click('[data-cost-layout=summary]');wait_table('#cost-records-table');sort('#cost-records-table','amount');sort('#cost-records-table','amount');assert '99,999' in page.locator('#cost-records-table tbody tr').first.inner_text();filter_col('#cost-records-table','amount',minimum=100,maximum=110);assert page.locator('#cost-records-table tbody tr').count()==11;reset('#cost-records-table')
+   page.click('nav [data-view=activity]');wait_table('#sales-records-table');sort('#sales-records-table','amount');assert page.locator('[data-sales-id]').first.get_attribute('data-sales-id')=='high';filter_col('#sales-records-table','storeName','컬리');assert page.locator('[data-sales-id]').count()==1;page.check('#sales-select-all');assert page.locator('[data-sales-select]:checked').count()==1 and page.locator('[data-sales-select]:checked').get_attribute('data-sales-select')=='high';assert page.locator('#sales-total').inner_text()=='₩10'
+   with page.expect_download() as download:page.click('#export')
+   with Path(download.value.path()).open(encoding='utf-8-sig',newline='') as f:assert len(list(csv.DictReader(f)))==1
+   reset('#sales-records-table');page.click('nav [data-view=stores]');master='table:has([data-store-record])';wait_table(master);filter_col(master,1,'컬리');assert page.locator('[data-store-record]:not(.table-query-hidden)').count()==1;assert page.locator('[data-store-record]:not(.table-query-hidden) [data-store-name]').input_value()=='마켓컬리';reset(master);sort(master,1);assert state()==before
+   # Editable input rows retain their data indices, values and save order while filtered/sorted.
+   page.click('nav [data-view=costs]');page.click('[data-cost-tab=center]');page.click('[data-cost-workspace=entry]');page.click('[data-center-input=box]');page.fill('[data-charge-field=quantity]','2');page.fill('[data-charge-field=price]','10');page.click('#charge-add');page.locator('[data-charge-field=quantity]').nth(1).fill('1');page.locator('[data-charge-field=price]').nth(1).fill('100');wait_table('.center-charge-table');sort('.center-charge-table',1);assert page.locator('[data-sheet-source=manual]').first.get_attribute('data-charge-row')=='1';filter_col('.center-charge-table',1,minimum=2,maximum=2);assert page.locator('[data-sheet-source=manual]:not(.table-query-hidden)').count()==1;assert '120' in page.locator('#charge-total').inner_text();reset('.center-charge-table');assert page.locator('[data-charge-field=quantity]').evaluate_all('els=>els.map(e=>e.value)')==['2','1'];assert state()==before
+   filter_col('.center-charge-table',1,minimum=2,maximum=2);page.click('#center-charge-entry button[type=submit]');page.wait_for_selector('[data-edit]');saved=state()['costs'][140:];assert sorted((r['quantity'],r['amount']) for r in saved)==[(1,100),(2,20)]
+   password_viewer=secrets.token_urlsafe(24);assert page.evaluate("""async password=>{const me=await(await fetch('/api/me')).json();return(await fetch('/api/users',{method:'POST',headers:{'Content-Type':'application/json','X-CSRF-Token':me.csrf},body:JSON.stringify({username:'table_viewer',name:'표 조회',password,role:'viewer'})})).status;}""",password_viewer)==201
+   viewer=browser.new_page(viewport={'width':390,'height':844});viewer.on('pageerror',lambda e:errors.append(str(e)));viewer.goto('http://127.0.0.1:'+port);viewer.wait_for_selector('#login-form');viewer.fill('[name=username]','table_viewer');viewer.fill('[name=password]',password_viewer);viewer.click('#login-form button');viewer.wait_for_selector('.kpi');viewer.click('nav [data-view=costs]');viewer.wait_for_selector('#cost-records-table [data-table-control=sort]');viewer.locator('#cost-records-table [data-table-control=sort][data-table-column=amount]').click();assert viewer.locator('[data-edit]').first.is_disabled();assert viewer.locator('[data-delete]').first.is_disabled();assert viewer.locator('#cost-records-table [data-table-control=filter]').first.is_enabled();assert viewer.evaluate('document.documentElement.scrollWidth')<=390;viewer.close()
+   # All data headers, including asynchronous account/history tables, receive the same controls.
+   for route in ['dashboard','masters','stores','locations','settings']:
+    page.click('nav [data-view='+route+']')
+    if route=='settings':page.wait_for_selector('#audit-list table')
+    page.wait_for_function("[...document.querySelectorAll('#content table thead th')].filter(th=>th.textContent.trim()&&!th.querySelector('input')&&!/^(관리|상세|선택|상태\\s*\\/\\s*관리)$/.test(th.textContent.trim())).every(th=>th.querySelector('[data-table-control=sort]')&&th.querySelector('[data-table-control=filter]'))")
+   page.click('nav [data-view=costs]');page.click('[data-cost-tab=center]');page.click('[data-cost-workspace=upload]');preview_file=Path(tmp)/'preview.csv'
+   with preview_file.open('w',encoding='utf-8-sig',newline='') as f:
+    w=csv.writer(f);w.writerow(['월','데이터유형','센터','업무구분','매장코드','매장명','관리그룹','비용항목','청구단위','수량','단가','값','메모']);w.writerow(['2026-11','비용','임시저장센터','공통','C001','','','박스 출고비','원','','','9999','검토만'])
+   page.set_input_files('#file',str(preview_file));page.wait_for_selector('#cost-preview-table [data-table-control=filter]');filter_col('#cost-preview-table','amount',minimum=9999,maximum=9999);assert page.locator('#cost-preview-table tbody tr:not(.table-query-hidden)').count()==1;page.click('#cancel-import');assert len(state()['costs'])==142
+   if os.environ.get('TABLE_SCREENSHOT'):page.click('nav [data-view=costs]');page.click('[data-cost-tab=all]');page.click('[data-cost-columns=detailed]');page.evaluate('window.scrollTo(0,0)');page.screenshot(path=os.environ['TABLE_SCREENSHOT'],full_page=True)
+   page.set_viewport_size({'width':390,'height':844});assert page.evaluate('document.documentElement.scrollWidth')<=390;assert not errors,errors;browser.close();print('PASS: full-scope paged cost sort/filter/ranges/export + hidden-column filters + summary + sales filtered selection/export + master substring + input row identity and totals + no financial writes + mobile')
+  finally:
+   process.terminate()
+   try:process.wait(timeout=10)
+   except subprocess.TimeoutExpired:process.kill();process.wait()
+if __name__=='__main__':main()
