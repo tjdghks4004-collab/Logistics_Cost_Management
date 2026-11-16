@@ -1,5 +1,5 @@
 import {test} from 'node:test';import assert from 'node:assert/strict';
-import {tableNumber,applyTableQuery,tableCellMatches,tableQuery,setTableQuery} from './table-controls.mjs';
+import {tableNumber,applyTableQuery,tableCellMatches,tableQuery,setTableQuery,tableValueKey,tableValueOptions} from './table-controls.mjs';
 const columns=[{key:'name',type:'text',value:r=>r.name},{key:'amount',type:'number',value:r=>r.amount},{key:'month',type:'text',value:r=>r.month}];
 test('formatted money, zero and decimal quantities sort numerically with missing values always last',()=>{
  const rows=[{name:'a',amount:'₩10,000'},{name:'b',amount:'₩900'},{name:'z',amount:0},{name:'m',amount:'—'},{name:'d',amount:'3.5박스'}];
@@ -24,4 +24,17 @@ test('localized dates and times sort by actual calendar values rather than unpad
 
 test('column values are evaluated once per row during filtering and sorting',()=>{
  let calls=0;const rows=Array.from({length:250},(_,i)=>({amount:250-i})),columns=[{key:'amount',type:'number',value:r=>{calls++;return r.amount;}}];applyTableQuery(rows,columns,{filters:{amount:{min:'1'}},sort:{key:'amount',direction:'asc'}});assert.equal(calls,250);
+});
+
+test('checkbox values are OR within one column and AND with text, ranges and other columns',()=>{
+ const rows=[{name:'마켓컬리',amount:0},{name:'컬리 부산',amount:10},{name:'다른 곳',amount:20}];
+ const selected=[tableValueKey('마켓컬리'),tableValueKey('컬리 부산')];assert.deepEqual(applyTableQuery(rows,columns,{filters:{name:{values:selected}}}),rows.slice(0,2));assert.deepEqual(applyTableQuery(rows,columns,{filters:{name:{values:selected,text:'부산'},amount:{min:5,max:15}}}),[rows[1]]);assert.deepEqual(applyTableQuery(rows,columns,{filters:{name:{values:[]}}}),[]);assert.deepEqual(applyTableQuery(rows,columns,{filters:{}}),rows);
+ assert.equal(tableCellMatches(0,{values:[tableValueKey(0,'number')]},'number'),true);assert.equal(tableCellMatches(null,{values:[tableValueKey(0,'number')]},'number'),false);
+});
+test('distinct choices include off-page data and other-column conditions but ignore their own filter',()=>{
+ const rows=Array.from({length:300},(_,i)=>({name:i<150?'A':'B',amount:i})),query={filters:{name:{values:[tableValueKey('A')]},amount:{min:100,max:200}}};
+ const options=tableValueOptions(rows,columns,query,'name');assert.deepEqual(options.map(o=>[o.label,o.count]),[['A',50],['B',51]]);assert.equal(tableValueOptions(rows,columns,{filters:{}},'amount').at(-1).value,299);assert.equal(tableValueOptions(rows,columns,{filters:{amount:{values:[]}}},'amount').length,300);
+});
+test('choice keys preserve code zeros, distinguish blanks and zero, group formatted numbers and do not mutate source data',()=>{
+ const rows=[{name:'001',amount:0},{name:'01',amount:'₩0'},{name:'',amount:null},{name:'—',amount:'—'}],before=structuredClone(rows),options=tableValueOptions(rows,columns,{},'amount');assert.equal(options.length,2);assert.equal(options.find(o=>o.key==='n:0').count,2);assert.equal(options.find(o=>o.key==='empty:').count,2);assert.notEqual(tableValueKey('001'),tableValueKey('01'));assert.deepEqual(rows,before);
 });
