@@ -12,7 +12,10 @@ export const currencies=['USD','EUR','JPY','CNY','VND','HKD','SGD','GBP','AUD','
 export const currencyHeaders=[...groupedHeaders,'통화','외화금액','적용환율','환율적용단위','환율기준일'];
 export const unifiedHeaders=[...currencyHeaders,'컨테이너타입'];
 export const domainLabels={center:'물류센터',trade:'수출입',common:'공통'};
-export const countCategories=['B2C 출고 건수','B2B 출고 건수'];
+export const countKinds={parcel:'택배 발송 건수',box:'출고 박스 수',legacy:'기존 출고 건수 (분류 전)'};
+export function countKindOf(row){return / 택배 발송 건수$/.test(row.category||'')?'parcel':/ 출고 박스 수$/.test(row.category||'')?'box':'legacy';}
+export function countCategory(account,kind='legacy'){if(!Object.hasOwn(countKinds,kind))throw Error('수량 기준을 확인하세요.');return account+' '+({parcel:'택배 발송 건수',box:'출고 박스 수',legacy:'출고 건수'}[kind]);}
+export const countCategories=['B2C','B2B'].flatMap(a=>Object.keys(countKinds).map(k=>countCategory(a,k)));
 export function validateRecord(raw,ctx,{previous=null}={}){
  const r={...raw},fail=s=>{throw Error(s);};
  if(r.mode!=='reverse')delete r.calculation;
@@ -47,7 +50,7 @@ export function validateRecord(raw,ctx,{previous=null}={}){
  else {r.storeId='';r.groupId=r.groupId||'';if(r.groupId&&!ctx.groups.some(g=>g.id===r.groupId))fail('관리그룹을 확인하세요.');}
  if(r.recordType==='count'){
   if(!['B2C','B2B'].includes(r.account))fail('출고 건수는 B2C 또는 B2B를 선택하세요.');
-  r.category=r.account+' 출고 건수';r.unit='건';r.price=null;
+  r.category=countCategory(r.account,countKindOf(r));r.unit=countKindOf(r)==='box'?'BOX':'건';r.price=null;
   if(!/^\d+$/.test(String(r.quantity))||Number(r.quantity)>1e12)fail('건수는 0 이상 1조 이하 정수로 입력하세요.');
   r.quantity=Number(r.quantity);r.amount=0;
  }else {
@@ -111,8 +114,8 @@ export function costDrivers(currentCost,previousCost,currentCount,previousCount)
  return {oldRate,newRate,volumeEffect:(currentCount-previousCount)*oldRate,rateEffect:currentCount*(newRate-oldRate),difference:currentCost-previousCost};
 }
 
-export function countVolume(rows){
- const groups=new Map();for(const r of rows.filter(r=>r.recordType==='count')){const key=JSON.stringify([r.month||'',r.center,r.account]);if(!groups.has(key))groups.set(key,[]);groups.get(key).push(r);}
+export function countVolume(rows,kind='legacy'){
+ const groups=new Map();for(const r of rows.filter(r=>r.recordType==='count'&&countKindOf(r)===kind)){const key=JSON.stringify([r.month||'',r.center,r.account]);if(!groups.has(key))groups.set(key,[]);groups.get(key).push(r);}
  let total=0;for(const rr of groups.values()){total+=preferScopeTotals(rr,true).reduce((n,r)=>n+Number(r.quantity),0);}return total;
 }
 

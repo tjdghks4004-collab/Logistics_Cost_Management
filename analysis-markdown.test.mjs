@@ -18,3 +18,8 @@ test('filtered status excludes out-of-scope records and unrelated invoice proble
  state.reconciliations=[{id:'whole',months:['2026-10'],recordIds:['a','b'],expected:300}];result=analysisFilterMonthStates(state,['2026-10'],[a],monthly)[0];assert.equal(result.status,'reconciled');assert.equal(result.outsideChecks,1);assert.equal(result.costCount,1);
  state.periodEvents=[{month:'2026-10',action:'close'}];result=analysisFilterMonthStates(state,['2026-10'],[],monthly)[0];assert.equal(result.status,'empty');assert.equal(result.monthClosed,true);assert.equal(result.costCount,0);
 });
+
+test('AI copy keeps explicit quantity scopes outside the selected cost category and marks missing bases',()=>{
+ const s=make();s.countBasis='출고 박스 수';s.currentRows=s.currentRows.filter(r=>r.recordType!=='count');s.quantityRows=[{month:'2026-10',center:'A',account:'B2C',recordType:'count',category:'B2C 택배 발송 건수',quantity:1},{month:'2026-10',center:'A',account:'B2C',recordType:'count',category:'B2C 출고 박스 수',quantity:2},{month:'2026-10',center:'A',account:'B2C',recordType:'count',category:'B2C 출고 건수',quantity:7}];s.previousQuantityRows=[];
+ const text=buildAnalysisMarkdown(s);assert.ok(text.includes('# 수량 집계 기준\n출고 박스 수'));assert.ok(text.includes('| 택배 발송 건수 | 1 | 미등록 |'));assert.ok(text.includes('| 출고 박스 수 | 2 | 미등록 |'));assert.ok(text.includes('| 기존 출고 건수 (분류 전) | 7 | 미등록 |'));assert.ok(!text.includes('| 10 |'));
+});

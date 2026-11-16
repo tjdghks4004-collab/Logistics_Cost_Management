@@ -182,3 +182,13 @@ test('reverse entry preserves authoritative total, stores the quantity/unit-pric
  const direct=validateRecord({...record,mode:'amount',amount:'1000'},ctx,{previous:record});assert.equal(direct.calculation,undefined);assert.equal(direct.quantity,null);
  assert.throws(()=>validateRecord({...base,mode:'reverse',recordType:'count',quantity:3,amount:1000},ctx));
 });
+
+test('parcel, box and legacy counts retain separate units, imports and aggregate scope priority',async()=>{
+ const {countCategory,countKindOf}=await import('./domain.mjs');
+ const make=(kind,q,extra={})=>validateRecord({...base,recordType:'count',category:countCategory('B2C',kind),quantity:q,...extra},ctx);
+ const legacy=make('legacy','9'),parcel=make('parcel','1'),box=make('box','2');assert.equal(box.unit,'BOX');assert.equal(parcel.unit,'건');assert.equal(legacy.category,'B2C 출고 건수');assert.equal(countKindOf(box),'box');
+ const records=[legacy,parcel,box];assert.equal(countVolume(records),9);assert.equal(countVolume(records,'parcel'),1);assert.equal(countVolume(records,'box'),2);
+ const common=make('parcel','10',{storeId:''});assert.equal(countVolume([...records,common],'parcel'),10);assert.equal(countVolume([...records,common],'box'),2);
+ for(const r of [parcel,box,legacy]){const row={월:r.month,비용유형:'물류센터',데이터유형:'건수',센터:'A',업무구분:'B2C',매장코드:'S001',비용항목:r.category,값:r.quantity};const result=validateUnified([unifiedHeaders,unifiedHeaders.map(h=>row[h]??'')],ctx);assert.deepEqual(result.errors,[]);assert.equal(result.entries[0].category,r.category);assert.equal(result.entries[0].unit,r.unit);}
+ const edited=validateRecord({...box,mode:'amount',quantity:'3'},ctx,{previous:box});assert.equal(edited.category,box.category);assert.equal(edited.quantity,3);assert.equal(legacy.quantity,9);
+});

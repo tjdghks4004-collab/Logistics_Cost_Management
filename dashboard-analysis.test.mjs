@@ -14,3 +14,8 @@ test('increase ranking uses financial differences, excludes counts, preserves hi
  const current=[r('a',300,{category:'A',storeId:'s',groupId:'g'}),r('b',200,{category:'B'}),r('c',99999,{recordType:'count'}),r('d',20,{category:'D'})],old=[r('oa',100,{category:'A',storeId:'s',groupId:'g'}),r('od',30,{category:'D'})];
  const ranks=dashboardCostIncreases(current,old,'item');assert.deepEqual(ranks.map(x=>x.delta),[200,200]);assert.equal(ranks.find(x=>x.key==='B').baselineMissing,true);assert.equal(ranks.find(x=>x.key==='A').percent,200);const stores=dashboardCostIncreases(current,old,'store');assert.equal(stores.find(x=>x.key==='["s","g"]').delta,200);assert.deepEqual(stores.find(x=>x.key==='["s","g"]').ids,['a']);
 });
+
+test('parcel rates never mix with box, truck or count quantities',()=>{
+ const metrics=dashboardChargeMetrics([r('parcel',600,{category:'택배비',unit:'건',quantity:2}),r('box',900,{unit:'BOX',quantity:3}),r('count',0,{recordType:'count',category:'B2C 출고 박스 수',unit:'BOX',quantity:100})],[]);
+ assert.equal(metrics.find(r=>r.kind==='parcel').unitCost,300);assert.equal(metrics.find(r=>r.kind==='box').unitCost,300);assert.equal(metrics.find(r=>r.kind==='box').quantity,3);
+});

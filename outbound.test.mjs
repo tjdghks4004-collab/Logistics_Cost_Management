@@ -12,3 +12,11 @@ test('missing and zero quantities remain distinct and invalid rows/duplicates bl
  for(const bad of [{quantity:'1.5'},{amount:'-1'},{storeId:'missing'},{storeQuery:'미확정 검색어'}])assert.ok(planOutboundEntry({...draft,rows:[{...draft.rows[0],...bad}]},ctx).errors.length);
  const saved=planOutboundEntry(draft,ctx).entries;assert.ok(planOutboundEntry(draft,{...ctx,costs:saved}).errors.length);
 });
+
+test('explicit parcel and box costs pair only with matching count basis; old counts are preserved',()=>{
+ const context={...ctx,masters:[...ctx.masters,{name:'택배비',active:true}],units:['원','건','BOX']};
+ const plans=['parcel','box','legacy'].map(countKind=>planOutboundEntry({...draft,countKind,rows:[{storeId:'s1',amount:'600',quantity:countKind==='box'?'2':'1'}]},context));
+ plans.forEach(p=>assert.deepEqual(p.errors,[]));assert.equal(plans[0].entries[0].category,'택배비');assert.equal(plans[0].entries[0].price,600);assert.equal(plans[1].entries[0].price,300);assert.equal(plans[1].entries[1].unit,'BOX');
+ const rows=plans.flatMap(p=>p.entries);const summary=summarizeOutboundRows(rows);assert.equal(summary.length,3);assert.deepEqual(new Set(summary.map(g=>g.kind)),new Set(['parcel','box','legacy']));assert.deepEqual(summary.map(g=>g.quantity),[1,2,1]);assert.deepEqual(summary.map(g=>g.unitCost),[600,300,600]);assert.equal(rows.reduce((n,r)=>n+r.amount,0),1800);
+ assert.ok(planOutboundEntry({...draft,countKind:'box',rows:[{...draft.rows[0],quantity:'1.5'}]},context).errors.length);
+});

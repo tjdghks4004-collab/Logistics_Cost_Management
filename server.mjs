@@ -43,6 +43,7 @@ function validateState(next,previous=null,restore=false){
    if((r.chargeGroup||'')!==checked.chargeGroup||(r.namedPlace||'')!==checked.namedPlace)throw Error('비용 그룹 또는 지정 장소를 확인하세요.');
    if((r.containerType||'')!==checked.containerType)throw Error('컨테이너 타입을 확인하세요.');
    if(r.calculation!==undefined&&(r.calculation!=='reverse'||r.recordType!=='cost'||(r.currency||'KRW')!=='KRW'||checked.price!==r.price||checked.quantity!==r.quantity))throw Error('역산 단가·수량·원화 입력 정보를 확인하세요.');
+   if(r.recordType==='count'&&(checked.category!==r.category||checked.unit!==r.unit))throw Error('수량 기준과 항목·단위가 일치하지 않습니다.');
    if(checked.amount!==r.amount)throw Error('수량·단가 또는 외화·환율의 계산 결과와 금액이 일치하지 않습니다.');
    if(!restore&&((r.groupId||'')!==(checked.groupId||'')||(r.countryCode||'')!==(checked.countryCode||'')))throw Error('매장·센터의 소속과 국가 연결을 확인하세요. 과거 내역은 당시 소속을 유지합니다.');
    // Restoring a historical snapshot must preserve its original group/country.

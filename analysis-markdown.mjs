@@ -1,6 +1,6 @@
 import {lockedMonths,reconciliationResult} from './controls.mjs';
 import {dashboardChargeMetrics,dashboardCostIncreases} from './dashboard-analysis.mjs';
-import {categoryParentOf,domainLabels} from './domain.mjs';
+import {categoryParentOf,domainLabels,countKinds,countVolume,countKindOf} from './domain.mjs';
 export function markdownCell(value){return String(value??'—').replace(/[\r\n\t]+/g,' ').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\\/g,'\\\\').replace(/([|`*_])/g,'\\$1');}
 const analysisNumber=value=>value==null?'—':Number(value).toLocaleString('ko-KR',{maximumFractionDigits:6});
 const analysisMoney=value=>value==null?'—':analysisNumber(value)+'원';
@@ -10,11 +10,12 @@ export function buildAnalysisMarkdown(snapshot){
  const {period,currentRows,previousRows,monthly,current,previous,monthStates,filters,masters=[],names,generatedAt,revision}=snapshot;
  const costRows=rows=>rows.filter(r=>r.recordType!=='count'),costComplete=side=>{const months=side==='current'?period.current:period.previous;return months.length>0&&months.every(month=>monthly.some(r=>r.side===side&&r.month===month&&r.costAvailable));};
  const comparable=costComplete('current')&&costComplete('previous');
- const volume=(side,summary)=>{const months=monthly.filter(r=>r.side===side),available=months.filter(r=>r.volumeAvailable).length;return !available?'— (출고 건수 미등록)':analysisNumber(summary.volume)+'건'+(available<months.length?' (일부 월 미등록 · 등록분 합계)':'');};
+ const volume=(side,summary)=>{const months=monthly.filter(r=>r.side===side),available=months.filter(r=>r.volumeAvailable).length;return !available?'— (출고 건수 미등록)':analysisNumber(summary.volume)+(snapshot.countBasis===countKinds.box?'박스':'건')+(available<months.length?' (일부 월 미등록 · 등록분 합계)':'');};
  const sales=(side,summary)=>{const months=monthly.filter(r=>r.side===side),available=months.filter(r=>r.salesAvailable).length;return !available?'— (매출 미등록 또는 조회 범위 불일치)':analysisMoney(summary.sales)+(available<months.length?' (일부 월 미등록 · 등록분 합계)':'');};
  const cost=(rows,side,value)=>analysisMoney(value)+(costRows(rows).length?(costComplete(side)?'':' (일부 월 미등록 · 등록분 합계)'):' (등록 비용 없음 · 실제 비용 0으로 단정 금지)');
  const statusNames={closed:'마감',reconciled:'대조 완료',review:'차액·누락 확인',entering:'입력 중',empty:'입력 전'};
- const out=['# 요청',
+ const quantityRows=snapshot.quantityRows??currentRows,previousQuantityRows=snapshot.previousQuantityRows??previousRows;
+ const out=['# 요청', '- 택배 발송 건수(운송장), 출고 박스 수, 기존 출고 건수는 별개입니다. 서로 합산하지 말고 단가의 분모를 구분하세요.',
  '- 아래 물류비 자료를 분석해 현재 비용 구조의 특징, 비용 증가에 기여한 항목·매장, 추가 확인이 필요한 사항을 설명해 주세요.',
  '- 총비용, 센터 출고 건당 비용, 매출 대비 물류비율, 박스·용차·임가공 단가를 구분해 검토해 주세요.',
  '- 조회·비교 기간과 필터 범위를 그대로 사용하고, 비교 자료가 없거나 입력 중인 월의 누락을 0원으로 간주하지 마세요.',
@@ -56,7 +57,7 @@ export function buildAnalysisMarkdown(snapshot){
  out.push('', '## 비용 증가 상위 5개 (등록 금액 차액 기준)');
  if(!comparable)out.push('비교 없는 기간 또는 조회·비교 월 비용 자료 부족으로 증가 순위를 계산하지 않습니다.');
  else for(const kind of ['item','store'])out.push('',kind==='item'?'### 항목':'### 매장',analysisTable(['항목·매장','조회 비용','비교 비용','증가액','비교 주의'],dashboardCostIncreases(currentRows,previousRows,kind).map(g=>{const label=kind==='item'?g.key:(()=>{const [storeId,groupId]=JSON.parse(g.key);return names.storeCode(storeId)+' · '+names.storeName(storeId)+' / '+names.group(groupId);})();return [label,analysisMoney(g.current),g.baselineMissing?'이력 없음':analysisMoney(g.previous),analysisMoney(g.delta),g.baselineMissing?'신규·비교 미등록 (실제 신규 확정 아님)':g.previous===0?'비교 금액 0':'등록 자료 기준'];})));
- return out.join('\n')+'\n';
+ out.push('','# 수량 집계 기준',snapshot.countBasis||countKinds.legacy,'','# 기준별 등록 수량 (서로 합산 금지)',analysisTable(['기준','조회','비교'],Object.entries(countKinds).map(([key,label])=>[label,quantityRows.some(r=>r.recordType==='count'&&countKindOf(r)===key)?countVolume(quantityRows,key):'미등록',previousQuantityRows.some(r=>r.recordType==='count'&&countKindOf(r)===key)?countVolume(previousQuantityRows,key):'미등록'])));return out.join('\n')+'\n';
 }
 
 export function analysisFilterMonthStates(state,months,selectedRows,monthly){
