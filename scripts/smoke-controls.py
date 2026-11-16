@@ -18,7 +18,7 @@ def main():
    page.click('nav [data-view=locations]');page.fill('#center-add [name=name]','임시저장센터');page.click('#center-add button');page.wait_for_selector('[data-center-country]')
    page.click('nav [data-view=costs]');page.locator('#operational-controls summary').click()
    def upload(amount,month='2026-11'):
-    with page.expect_download() as download:page.click('#csv-template')
+    with page.expect_download() as download:page.click('[data-cost-workspace=upload]');page.click('#csv-template')
     path=Path(tmp)/'template.csv';download.value.save_as(str(path));headers=next(csv.reader(io.StringIO(path.read_text(encoding='utf-8-sig'))))
     values={'월':month,'비용유형':'물류센터','데이터유형':'비용','국가코드':'KR','센터':'임시저장센터','업무구분':'B2C','비용항목':'B2C 출고비','청구단위':'원','값':str(amount)}
     out=io.StringIO();writer=csv.writer(out);writer.writerow(headers);writer.writerow([values.get(h,'') for h in headers]);file=Path(tmp)/('upload-'+str(amount)+'.csv');file.write_text(out.getvalue(),encoding='utf-8-sig');page.set_input_files('#file',str(file));page.wait_for_selector('#commit-import');assert page.locator('#commit-import').is_enabled(),page.locator('#upload-review').inner_text();page.click('#commit-import');page.wait_for_selector('#commit-import',state='detached')

@@ -15,7 +15,7 @@ def main():
    def state():return page.evaluate("async()=>(await(await fetch('/api/state')).json()).state")
    page.goto('http://127.0.0.1:'+port);page.wait_for_selector('#login-form');page.fill('[name=username]','searchadmin');page.fill('[name=password]',password);page.click('#login-form button');page.wait_for_selector('#start-empty');page.click('#start-empty');page.wait_for_selector('.kpi')
    assert page.evaluate("""async()=>{const me=await(await fetch('/api/me')).json(),d=await(await fetch('/api/state')).json();d.state.centerMasters=[{name:'동탄센터',countryCode:'KR'}];d.state.groups=[{id:'g1',name:'온라인'}];d.state.stores=[{id:'s1',code:'C100',name:'마켓컬리',groupId:'g1',active:true},{id:'s2',code:'C101',name:'컬리 온라인',groupId:'g1',active:true},{id:'s3',code:'C102',name:'네이버',groupId:'g1',active:true}];return(await fetch('/api/state',{method:'PUT',headers:{'Content-Type':'application/json','X-CSRF-Token':me.csrf},body:JSON.stringify({revision:d.revision,state:d.state})})).status;}""")==200
-   page.reload();page.wait_for_selector('.kpi');page.click('nav [data-view=entry]');page.click('[data-center-input=outbound]');page.fill('#outbound-entry [name=month]','2026-11')
+   page.reload();page.wait_for_selector('.kpi');page.click('nav [data-view=costs]');page.click('[data-cost-tab=center]');page.click('[data-cost-workspace=entry]');page.click('[data-center-input=outbound]');page.fill('#outbound-entry [name=month]','2026-11')
    page.fill('[data-store-search]','컬리');assert page.locator('#store-search-results [role=option]').count()==2;assert '마켓컬리' in page.locator('#store-search-results').inner_text() and '네이버' not in page.locator('#store-search-results').inner_text()
    if os.environ.get('SEARCH_SCREENSHOT'):page.screenshot(path=os.environ['SEARCH_SCREENSHOT'])
    page.locator('[data-store-search]').focus();page.fill('[data-store-search]','컬리')
@@ -29,7 +29,7 @@ def main():
    page.locator('[data-multi=store]>summary').click();page.fill('[data-multi=store] .filter-search','컬리');labels=page.locator('[data-multi=store] .category-children label:not([hidden])').all_text_contents();assert any('마켓컬리' in t for t in labels) and any('컬리 온라인' in t for t in labels) and not any('네이버' in t for t in labels)
    page.locator('[data-multi=center]>summary').click();page.fill('[data-multi=center] .filter-search','탄센');assert any('동탄센터' in t for t in page.locator('[data-multi=center] .multi-options>label:not([hidden])').all_text_contents())
    page.fill('#cost-query','컬리');assert page.locator('[data-outbound-summary=true]').count()==1
-   page.set_viewport_size({'width':390,'height':844});page.click('nav [data-view=entry]');page.fill('[data-store-search]','컬리');assert page.locator('#store-search-results [role=option]').count()==2;assert page.evaluate('document.documentElement.scrollWidth')<=390
+   page.set_viewport_size({'width':390,'height':844});page.click('nav [data-view=costs]');page.click('[data-cost-tab=center]');page.click('[data-cost-workspace=entry]');page.fill('[data-store-search]','컬리');assert page.locator('#store-search-results [role=option]').count()==2;assert page.evaluate('document.documentElement.scrollWidth')<=390
    assert not errors,errors;b.close();print('PASS: substring store suggestions + code/group/category filters + no Enter submission + native confirmation cancel/accept + edit cancellation + totals + mobile')
   finally:
    p.terminate()

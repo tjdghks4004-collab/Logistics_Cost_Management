@@ -176,7 +176,7 @@ def main():
             common_columns=page.locator('#cost-records-table th').all_text_contents()
             assert '센터' not in common_columns and '수출입관리번호' not in common_columns and '금액 (KRW)' in common_columns
             assert len(common_columns)<len(trade_columns)
-            page.click('#cost-tab-entry');assert page.locator('#unified-entry').get_attribute('data-domain')=='common'
+            page.click('[data-cost-workspace=entry]');assert page.locator('#unified-entry').get_attribute('data-domain')=='common'
             page.click('[data-view=costs]');page.click('[data-cost-tab=all]')
 
             with page.expect_download() as multi_download:page.click('#export')
@@ -201,7 +201,7 @@ def main():
             page.reload();page.wait_for_selector('.kpi')
             choose('category-parent','센터 보관비')
             assert page.locator('#category option[value="보관료"]').count()==1
-            page.click('[data-view=entry]');page.click('[data-center-input=general]')
+            page.click('nav [data-view=costs]');page.click('[data-cost-tab=center]');page.click('[data-cost-workspace=entry]');page.click('[data-center-input=general]')
             assert page.locator('[data-u=category] optgroup[label="포워딩"] option[value="해상 운송료"]').count()==1
             page.evaluate("value=>localStorage.setItem('scm-logistics-review-v1',value)",before_master)
             page.reload();page.wait_for_selector('.kpi')
@@ -276,11 +276,11 @@ def main():
             page.evaluate("value=>localStorage.setItem('scm-logistics-review-v1',value)",original)
             page.reload();page.wait_for_selector('.kpi')
             assert page.locator('nav [data-view=tradeEntry]').count()==0
-            page.click('nav [data-view=entry]');page.click('[data-cost-section=tradeReport]')
+            page.click('nav [data-view=costs]');page.click('[data-cost-tab=center]');page.click('[data-cost-workspace=entry]');page.click('[data-cost-section=tradeReport]')
             assert page.locator('#title').inner_text()=='비용 관리'
             assert page.locator('#trade-tab-report').get_attribute('aria-selected')=='true'
-            page.click('#add')
-            assert page.locator('nav [data-view=entry]').evaluate("el=>el.classList.contains('active')")
+            page.click('[data-cost-workspace=entry]')
+            assert page.locator('nav [data-view=costs]').evaluate("el=>el.classList.contains('active')")
             page.fill('[name=shipment]','DRAFT-PRESERVED')
             page.click('#trade-tab-report');page.click('#trade-tab-entry')
             assert page.locator('[name=shipment]').input_value()=='DRAFT-PRESERVED'
@@ -297,7 +297,7 @@ def main():
             page.click('#unified-entry button[type=submit]');page.wait_for_selector('#trade-report-results')
             assert page.locator('#trade-tab-report').get_attribute('aria-selected')=='true'
             assert 'EXP-E2E-001' in page.locator('#trade-report-results').inner_text()
-            page.click('nav [data-view=costs]');page.wait_for_selector('[data-edit]')
+            page.click('nav [data-view=costs]');page.click('[data-cost-tab=all]');page.wait_for_selector('[data-edit]')
             assert page.locator('tbody tr').count()==20
             page.click('[data-cost-tab=trade]');assert page.locator('[data-edit]').count()==2
             page.click('[data-cost-columns=detailed]');assert page.locator('#cost-records-table tbody tr').first.locator('td').count()==len(trade_columns)
@@ -308,7 +308,7 @@ def main():
             assert page.evaluate("JSON.parse(localStorage.getItem('scm-logistics-review-v1')).costs.length")==110
             page.locator('[data-edit]').nth(18).click();page.fill('#record-edit [name=exchangeRate]','1400');page.click('#record-edit button[type=submit]')
             page.wait_for_selector('#record-edit',state='detached');assert '140,000' in page.locator('#cost-records-table tbody').inner_text()
-            with page.expect_download() as download:page.click('#template')
+            with page.expect_download() as download:page.click('[data-cost-workspace=upload]');page.click('#template')
             template=temp/'template.xlsx';download.value.save_as(str(template));filled=temp/'filled.xlsx'
             generator="""import ExcelJS from 'exceljs';
 const workbook=new ExcelJS.Workbook();await workbook.xlsx.readFile(process.argv[1]);const sheet=workbook.getWorksheet('통합 입력');

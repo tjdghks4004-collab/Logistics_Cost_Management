@@ -32,21 +32,21 @@ def main():
             page.wait_for_selector('#start-empty');page.click('#start-empty');page.wait_for_selector('.kpi')
             def workspace():return page.evaluate("async()=>{const r=await fetch('/api/state');if(!r.ok)throw Error('state');return (await r.json()).state}")
             state=workspace();assert state['costs']==[] and state['stores']==[] and state['centerMasters']==[]
-            page.click('[data-view=entry]');page.click('[data-center-input=general]');assert '물류센터를 먼저 등록' in page.locator('#content').inner_text()
+            page.click('nav [data-view=costs]');page.click('[data-cost-tab=center]');page.click('[data-cost-workspace=entry]');page.click('[data-center-input=general]');assert '물류센터를 먼저 등록' in page.locator('#content').inner_text()
             page.click('[data-view=locations]');page.fill('#center-add [name=name]','검증센터');page.click('#center-add button')
             page.wait_for_function("document.querySelector('[data-center-country]')!==null")
             page.click('[data-view=stores]');page.fill('#group-add [name=name]','SCM 관리그룹');page.click('#group-add button')
             page.wait_for_function("[...document.querySelector('#store-add [name=groupId]').options].some(o=>o.textContent==='SCM 관리그룹')")
             page.fill('#store-add [name=code]','SCM001');page.fill('#store-add [name=name]','검증매장');page.click('#store-add button')
             page.wait_for_selector('[data-store-record]');store=workspace()['stores'][0]['id']
-            page.click('[data-view=entry]');page.click('[data-center-input=general]')
+            page.click('nav [data-view=costs]');page.click('[data-cost-tab=center]');page.click('[data-cost-workspace=entry]');page.click('[data-center-input=general]')
             page.fill('#unified-entry [name=month]','2026-10')
             page.fill('[data-store-search]','SCM001');page.press('[data-store-search]','Tab');page.select_option('[data-u=category]','B2C 출고비')
             page.fill('[data-u=quantity]','100');page.fill('[data-u=price]','500');page.click('#unified-add')
             page.select_option('[data-unified-row="1"] [data-u=recordType]','count');page.fill('[data-unified-row="1"] [data-store-search]','검증매장');page.press('[data-unified-row="1"] [data-store-search]','Tab');page.fill('[data-unified-row="1"] [data-u=quantity]','100')
             page.click('#unified-entry button[type=submit]');page.wait_for_selector('[data-edit]');assert len(workspace()['costs'])==2
             # The manual path must enforce the same duplicate rule as file imports.
-            page.click('[data-view=entry]');page.click('[data-center-input=general]');page.fill('#unified-entry [name=month]','2026-10')
+            page.click('nav [data-view=costs]');page.click('[data-cost-tab=center]');page.click('[data-cost-workspace=entry]');page.click('[data-center-input=general]');page.fill('#unified-entry [name=month]','2026-10')
             page.fill('[data-store-search]','SCM001');page.press('[data-store-search]','Tab');page.select_option('[data-u=category]','B2C 출고비')
             page.fill('[data-u=quantity]','100');page.fill('[data-u=price]','500')
             assert page.evaluate("()=>{const e=new Event('beforeunload',{cancelable:true});window.dispatchEvent(e);return e.defaultPrevented}")
@@ -59,7 +59,7 @@ def main():
             page.click('[data-cost-tab=center]')
             assert page.locator('[data-cost-tab=center]').get_attribute('aria-selected')=='true'
             assert page.locator('#domain').evaluate('el=>el.closest("label").hidden')
-            with page.expect_download() as download:page.click('#template')
+            with page.expect_download() as download:page.click('[data-cost-workspace=upload]');page.click('#template')
             template=Path(tmp)/'template.xlsx';filled=Path(tmp)/'filled.xlsx';download.value.save_as(str(template))
             generator="""import ExcelJS from 'exceljs';const book=new ExcelJS.Workbook();await book.xlsx.readFile(process.argv[1]);const sheet=book.getWorksheet('통합 입력'),headers=sheet.getRow(1).values.slice(1);const row={'월':'2026-10','비용유형':'물류센터','데이터유형':'비용','국가코드':'KR','센터':'검증센터','업무구분':'B2C','매장코드':'SCM001','비용항목':'임가공비(라벨링)','청구단위':'EA','수량':10,'단가':200};sheet.getRow(2).values=headers.map(h=>row[h]??'');await book.xlsx.writeFile(process.argv[2]);"""
             subprocess.run(['node','--input-type=module','-e',generator,str(template),str(filled)],cwd=ROOT,check=True,capture_output=True,text=True)
@@ -167,9 +167,9 @@ def main():
             page.fill('[name=username]','scm_admin');page.fill('[name=password]',password);page.click('#login-form button');page.wait_for_selector('.kpi');page.locator('#month').evaluate("el=>{el.value='2026-10';el.dispatchEvent(new Event('change'))}");assert page.locator('.kpi .value').first.inner_text()=='₩52,000';assert len(workspace()['sales'])==3
             page.click('#logout');page.wait_for_selector('#login-form')
             page.fill('[name=username]','scm_viewer');page.fill('[name=password]',password);page.click('#login-form button');page.wait_for_selector('.kpi')
-            assert page.locator('[data-view=entry]').is_visible() and page.locator('#add').is_hidden()
+            assert page.locator('nav [data-view=costs]').is_visible() and page.locator('#add').is_hidden()
             assert page.evaluate("async()=>(await fetch('/api/backup')).status")==403
-            page.click('nav [data-view=entry]');page.click('[data-cost-section=tradeReport]')
+            page.click('nav [data-view=costs]');page.click('[data-cost-tab=center]');page.click('[data-cost-workspace=entry]');page.click('[data-cost-section=tradeReport]')
             assert page.locator('#trade-tab-report').is_enabled()
             assert page.locator('#trade-tab-entry').count()==0
             assert page.locator('#trade-query').is_enabled()
