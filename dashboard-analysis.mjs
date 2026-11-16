@@ -7,7 +7,7 @@ export function dashboardMonthStates(state,months){
 }
 export function dashboardChargeMetrics(rows,masters){
  const groups=new Map(),costs=rows.filter(r=>r.domain==='center'&&r.recordType!=='count');
- for(const r of costs){const kind=r.category==='택배비'?'parcel':/^B2[CB] 출고비$/.test(r.category)?'box':r.category==='용차임'?'truck':categoryParentOf(r.category,masters)==='임가공비'?'processing':null;if(!kind)continue;
+ for(const r of costs){const kind=r.category==='택배비'?'parcel':/^(?:B2[CB] 출고비|박스 출고비)$/.test(r.category)?'box':r.category==='용차임'?'truck':categoryParentOf(r.category,masters)==='임가공비'?'processing':null;if(!kind)continue;
  const rawUnit=String(r.unit||'원'),unit=kind==='box'&&['BOX','박스'].includes(rawUnit.toUpperCase())?'BOX':kind==='truck'&&['건','회'].includes(rawUnit)?'회':rawUnit;
  const label=kind==='parcel'?'택배비':kind==='box'?'박스 출고비':kind==='truck'?'용차비':r.category;
  // Total-only invoices have no measurable quantity, and never become a per-unit denominator.

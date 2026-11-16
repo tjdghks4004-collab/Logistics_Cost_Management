@@ -12,7 +12,7 @@ test('quick counts exclude cost amounts and errors block unknown stores, malform
  const plan=planQuickEntry('0001\t100\nC002\t50',{...settings,recordType:'count',account:'B2B'},ctx);assert.deepEqual(plan.errors,[]);assert.equal(plan.entries.reduce((n,r)=>n+r.amount,0),0);assert.equal(plan.entries.reduce((n,r)=>n+r.quantity,0),150);assert.equal(plan.rows[0].category,'B2B 출고 건수');
  for(const text of ['unknown\t100','0001\t-1','0001\t1.5','0001\t1\textra','0001\t100\n0001\t100'])assert.ok(planQuickEntry(text,settings,ctx).errors.length);
  const first=planQuickEntry('0001\t100',settings,ctx).entries[0];assert.ok(planQuickEntry('0001\t100',settings,{...ctx,costs:[first]}).errors.length);
- assert.ok(planQuickEntry('0001\t100',{...settings,recordType:'count',account:'공통'},ctx).errors.length);
+ assert.deepEqual(planQuickEntry('0001\t100',{...settings,recordType:'count',account:'공통'},ctx).errors,[]);
 });
 test('pasted store keywords ignore Agent prefix and bracketed notes but reject ambiguous, short and inactive matches',()=>{
  const stores=[{id:'yes',code:'C101',name:'Agent _예스아시아',groupId:'g1',active:true},{id:'other',code:'C102',name:'마켓컬리',active:true},{id:'old',code:'C103',name:'Agent _예스아시아(해상)',active:false}];

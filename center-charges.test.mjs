@@ -52,3 +52,10 @@ test('one sheet contains manual and unresolved pasted rows; resolved fields, mem
  const pending={...d,pastePending:{0:'아직 검색 중'}};assert.ok(prepareCenterChargeSave(pending,ctx).errors.length);
  const duplicate={...draft,rows:[draft.rows[0],draft.rows[0]]};assert.equal(inspectCenterChargeSheet(duplicate,ctx).progress.invalid,1);
 });
+
+test('unsegmented box costs and monthly rent use common account without changing historical records',async()=>{
+ const {planRentEntry}=await import('./center-charges.mjs'),context={...ctx,masters:[...ctx.masters,{name:'박스 출고비',active:true},{name:'지급임차료',active:true}]};
+ const box=planCenterCharges({...draft,account:'공통'},context);assert.deepEqual(box.errors,[]);assert.equal(box.entries[0].category,'박스 출고비');assert.equal(box.entries[0].account,'공통');assert.equal(planCenterCharges(draft,context).entries[0].category,'B2B 출고비');
+ const d={month:'2026-11',center:'A',amount:'65000000',memo:'11월 임차료'},rent=planRentEntry(d,context);assert.deepEqual(rent.errors,[]);assert.equal(rent.entries[0].account,'공통');assert.equal(rent.entries[0].category,'지급임차료');assert.equal(rent.entries[0].storeId,'');assert.equal(rent.entries[0].amount,65000000);assert.equal(rent.entries[0].quantity,null);
+ assert.ok(planRentEntry(d,{...context,costs:rent.entries}).errors.length);for(const bad of [{amount:''},{amount:'-1'},{center:'미등록'},{month:'2026-13'}])assert.ok(planRentEntry({...d,...bad},context).errors.length);assert.equal(planRentEntry({...d,amount:'0'},context).entries[0].amount,0);
+});

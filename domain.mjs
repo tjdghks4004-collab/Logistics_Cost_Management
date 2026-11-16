@@ -13,9 +13,10 @@ export const currencyHeaders=[...groupedHeaders,'통화','외화금액','적용�
 export const unifiedHeaders=[...currencyHeaders,'컨테이너타입'];
 export const domainLabels={center:'물류센터',trade:'수출입',common:'공통'};
 export const countKinds={parcel:'택배 발송 건수',box:'출고 박스 수',legacy:'기존 출고 건수 (분류 전)'};
-export function countKindOf(row){return / 택배 발송 건수$/.test(row.category||'')?'parcel':/ 출고 박스 수$/.test(row.category||'')?'box':'legacy';}
-export function countCategory(account,kind='legacy'){if(!Object.hasOwn(countKinds,kind))throw Error('수량 기준을 확인하세요.');return account+' '+({parcel:'택배 발송 건수',box:'출고 박스 수',legacy:'출고 건수'}[kind]);}
-export const countCategories=['B2C','B2B'].flatMap(a=>Object.keys(countKinds).map(k=>countCategory(a,k)));
+export function countKindOf(row){return /(?:^| )택배 발송 건수$/.test(row.category||'')?'parcel':/(?:^| )출고 박스 수$/.test(row.category||'')?'box':'legacy';}
+export function countCategory(account,kind='legacy'){if(!Object.hasOwn(countKinds,kind))throw Error('수량 기준을 확인하세요.');return (account==='공통'?'':account+' ')+({parcel:'택배 발송 건수',box:'출고 박스 수',legacy:'출고 건수'}[kind]);}
+export const countCategories=['공통','B2C','B2B'].flatMap(a=>Object.keys(countKinds).map(k=>countCategory(a,k)));
+export function countCategoriesFor(account){return Object.keys(countKinds).map(k=>countCategory(account,k));}
 export function validateRecord(raw,ctx,{previous=null}={}){
  const r={...raw},fail=s=>{throw Error(s);};
  if(r.mode!=='reverse')delete r.calculation;
@@ -49,7 +50,7 @@ export function validateRecord(raw,ctx,{previous=null}={}){
  if(r.storeId){const s=ctx.stores.find(s=>s.id===r.storeId&&(s.active||sameStore));if(!s)fail('등록된 사용 중 매장을 선택하세요.');r.groupId=sameStore?previous.groupId:s.groupId;}
  else {r.storeId='';r.groupId=r.groupId||'';if(r.groupId&&!ctx.groups.some(g=>g.id===r.groupId))fail('관리그룹을 확인하세요.');}
  if(r.recordType==='count'){
-  if(!['B2C','B2B'].includes(r.account))fail('출고 건수는 B2C 또는 B2B를 선택하세요.');
+  if(!['B2C','B2B','공통'].includes(r.account))fail('수량 업무 구분을 확인하세요.');
   r.category=countCategory(r.account,countKindOf(r));r.unit=countKindOf(r)==='box'?'BOX':'건';r.price=null;
   if(!/^\d+$/.test(String(r.quantity))||Number(r.quantity)>1e12)fail('건수는 0 이상 1조 이하 정수로 입력하세요.');
   r.quantity=Number(r.quantity);r.amount=0;

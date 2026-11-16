@@ -1,7 +1,7 @@
 import {validateRecord,assertNoNewCostDuplicates,categoryParentOf,fingerprint} from './domain.mjs';
 import {resolveStoreSearch} from './quick-entry.mjs';
 export const centerChargeTypes={box:{label:'박스 출고비',quantity:'박스 수',unit:'BOX',mode:'calculated'},truck:{label:'용차비',quantity:'용차 횟수',unit:'건',mode:'amount'},processing:{label:'임가공비',quantity:'작업 수량',unit:'EA',mode:'calculated'}};
-export function centerChargeCategories(type,account,masters){return masters.filter(m=>m.active&&(type==='box'?m.name===account+' 출고비':type==='truck'?m.name==='용차임':type==='processing'&&categoryParentOf(m.name,masters)==='임가공비')).map(m=>m.name);}
+export function centerChargeCategories(type,account,masters){return masters.filter(m=>m.active&&(type==='box'?m.name===(account==='공통'?'박스 출고비':account+' 출고비'):type==='truck'?m.name==='용차임':type==='processing'&&categoryParentOf(m.name,masters)==='임가공비')).map(m=>m.name);}
 export function planCenterCharges(draft,context){
  const entries=[],errors=[];if(!centerChargeTypes[draft.type]||!['amount','calculated','reverse'].includes(draft.mode))return {entries,errors:['비용 유형·입력 방식을 확인하세요.']};
  if(!Array.isArray(draft.rows)||draft.rows.length>1000)return {entries,errors:['한 번에 최대 1,000행까지 입력하세요.']};
@@ -52,4 +52,8 @@ export function inspectCenterChargeSheet(draft,context){
 export function removeCenterChargePasteRow(draft,index){
  const lines=String(draft.paste||'').replace(/^\uFEFF/,'').split(/\r?\n/).filter(s=>s.trim());if(!Number.isInteger(index)||index<0||index>=lines.length)throw Error('삭제할 행을 확인하세요.');lines.splice(index,1);const result={...draft,paste:lines.join('\n')};
  for(const key of ['pasteStores','pastePending','pasteMemos'])result[key]=Object.fromEntries(Object.entries(draft[key]||{}).filter(([i])=>Number(i)!==index).map(([i,v])=>[Number(i)>index?Number(i)-1:Number(i),v]));return result;
+}
+
+export function planRentEntry(draft,context){
+ try{const entry=validateRecord({month:draft.month,center:draft.center,domain:'center',recordType:'cost',account:'공통',category:'지급임차료',mode:'amount',amount:draft.amount,memo:draft.memo||'',storeId:'',groupId:''},context);assertNoNewCostDuplicates([...(context.costs||[]),entry],context.costs||[]);return {entries:[entry],errors:[]};}catch(error){return {entries:[],errors:[error.message]};}
 }

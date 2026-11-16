@@ -20,3 +20,9 @@ test('explicit parcel and box costs pair only with matching count basis; old cou
  const rows=plans.flatMap(p=>p.entries);const summary=summarizeOutboundRows(rows);assert.equal(summary.length,3);assert.deepEqual(new Set(summary.map(g=>g.kind)),new Set(['parcel','box','legacy']));assert.deepEqual(summary.map(g=>g.quantity),[1,2,1]);assert.deepEqual(summary.map(g=>g.unitCost),[600,300,600]);assert.equal(rows.reduce((n,r)=>n+r.amount,0),1800);
  assert.ok(planOutboundEntry({...draft,countKind:'box',rows:[{...draft.rows[0],quantity:'1.5'}]},context).errors.length);
 });
+
+test('new unsegmented quantity records preserve parcel and box bases while historical accounts stay intact',()=>{
+ const context={...ctx,masters:[...ctx.masters,{name:'택배비',active:true},{name:'박스 출고비',active:true}],units:['원','건','BOX']};
+ for(const kind of ['box','parcel']){const p=planOutboundEntry({...draft,account:'공통',countKind:kind},context);assert.deepEqual(p.errors,[]);assert.equal(p.entries[0].category,kind==='box'?'박스 출고비':'택배비');assert.equal(p.entries[1].category,kind==='box'?'출고 박스 수':'택배 발송 건수');assert.equal(p.entries[1].account,'공통');assert.equal(summarizeOutboundRows(p.entries).length,1);}
+ assert.equal(planOutboundEntry(draft,context).entries[1].category,'B2C 출고 건수');
+});
