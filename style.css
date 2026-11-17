@@ -142,3 +142,5 @@ button{color:#525c68;background:#fff;border-color:#dfe4ea;border-radius:6px;font
 :root{--brand:#FFC000;--mint:#FFC000}aside nav button.active,aside nav button.active:hover,.cost-tabs button.active,.cost-tabs button[aria-selected=true],.cost-tabs button.active:hover{border-color:#FFC000}button.primary,.primary,.heading .primary,.entry-save-bar .primary,.sheet-actions .primary{background:#FFC000;border-color:#FFC000;color:#292724;box-shadow:none}button.primary:hover{background:#FFC000;border-color:#e5ac00}.item-bar.current{background:#FFC000}.login-card{border-top-color:#FFC000}.kpi-top{min-height:20px}.kpi .icon{display:none}
 
 .brand .brand-copy small{display:none!important}
+/* Keep the breadcrumb bar on the same centered content grid as the page. */
+main>header{width:100%;max-width:1536px;margin-inline:auto;padding-inline:var(--page-gutter,28px)}
