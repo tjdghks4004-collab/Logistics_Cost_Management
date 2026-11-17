@@ -20,6 +20,7 @@
     "test:ux-workflow": "python3 scripts/smoke-ux-workflow.py",
     "test:markdown-filters": "python3 scripts/smoke-markdown-filters.py",
     "test:analysis-markdown": "python3 scripts/smoke-analysis-markdown.py",
+    "test:dashboard-layout": "python3 scripts/smoke-dashboard-layout.py",
     "test:dashboard-analysis": "python3 scripts/smoke-dashboard-analysis.py",
     "test:paste-edit-save": "python3 scripts/smoke-paste-edit-save.py",
     "test:paste-review": "python3 scripts/smoke-paste-review.py",

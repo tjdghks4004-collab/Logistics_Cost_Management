@@ -40,7 +40,7 @@ def main():
             page.add_init_script("const actualConfirm=window.confirm.bind(window);window.confirm=m=>/^(등록을|수정을) 확정하시겠습니까/.test(String(m))?true:actualConfirm(m);")
             page.on('request',lambda request:requests.append(request.url))
             page.goto(origin);page.wait_for_selector('.kpi')
-            assert page.locator('[role=tab][data-dashboard-tab]').count()==5
+            assert page.locator('[role=tab][data-dashboard-tab]').count()==7
             assert page.locator('[role=tabpanel]:visible').count()==1
             assert page.locator('#dashboard-panel-overview').is_visible()
             assert not page.locator('.dashboard-controls > .period-help').evaluate('e=>e.open')
@@ -55,13 +55,13 @@ def main():
             assert page.locator('[data-dashboard-tab=comparison]').get_attribute('aria-selected')=='true'
             def check_item_chart():
                 for item_series,trend_series in [('current','조회 비용'),('previous','비교 비용')]:
-                    item_total=sum(float(bar.get_attribute('data-value')) for bar in page.locator(f'#cost-item-chart [data-item-series="{item_series}"]').all())
+                    item_total=float(page.locator('#cost-item-chart').get_attribute('data-'+item_series+'-total'))
                     trend_total=sum(float(bar.get_attribute('data-value')) for bar in page.locator(f'#dashboard-chart [data-series="{trend_series}"]').all())
                     assert item_total==trend_total,(item_series,item_total,trend_total)
                 assert page.locator('#cost-item-chart').get_attribute('data-mode')==page.locator('#dashboard-chart').get_attribute('data-mode')
                 for store_series,item_series in [('current','current'),('previous','previous')]:
-                    store_total=sum(float(bar.get_attribute('data-value')) for bar in page.locator(f'#cost-store-chart [data-store-series="{store_series}"]').all())
-                    item_total=sum(float(bar.get_attribute('data-value')) for bar in page.locator(f'#cost-item-chart [data-item-series="{item_series}"]').all())
+                    store_total=float(page.locator('#cost-store-chart').get_attribute('data-'+store_series+'-total'))
+                    item_total=float(page.locator('#cost-item-chart').get_attribute('data-'+item_series+'-total'))
                     assert store_total==item_total,(store_series,store_total,item_total)
                 assert page.locator('#cost-store-chart').get_attribute('data-mode')==page.locator('#dashboard-chart').get_attribute('data-mode')
                 assert page.locator('#efficiency-chart').get_attribute('data-mode')==page.locator('#dashboard-chart').get_attribute('data-mode')
@@ -71,7 +71,7 @@ def main():
                     end=float(page.locator('[data-wf-total="current"]').get_attribute('data-value'))
                     deltas=sum(float(bar.get_attribute('data-wf-delta')) for bar in page.locator('[data-wf-delta]').all())
                     assert start+deltas==end
-                    item_total=sum(float(bar.get_attribute('data-value')) for bar in page.locator('#cost-item-chart [data-item-series="current"]').all())
+                    item_total=float(page.locator('#cost-item-chart').get_attribute('data-current-total'))
                     assert end==item_total
                 elif page.locator('#dashboard-compare').input_value()=='ytd':
                     assert '비교 없는 누계' in page.locator('#cost-waterfall').inner_text()
@@ -109,10 +109,12 @@ def main():
             assert page.locator('#dashboard-target-toggle,#target-summary,#target-form').count()==0
             assert page.locator('#dashboard-compare option[value="target"]').count()==0
             def choose(id,value):
+                if page.locator('#dashboard-advanced-filters').count() and id not in ['month','center','store','group']:page.locator('#dashboard-advanced-filters').evaluate('e=>e.open=true')
                 box=page.locator(f'[data-multi="{"category" if id=="category-parent" else "store" if id=="group" else id}"]')
                 if box.locator('xpath=ancestor::details[@id="cost-advanced-filters"]').count():page.locator('#cost-advanced-filters').evaluate('e=>e.open=true')
                 if not box.evaluate('(el)=>el.open'):
                     page.locator('#title').click()
+                    if box.locator('xpath=ancestor::details[@id="dashboard-advanced-filters"]').count():page.locator('#dashboard-advanced-filters').evaluate('e=>e.open=true')
                     box.locator('summary').first.click()
                 if id=='category-parent' and value!='all':
                     group=box.locator(f'[data-category-group="{value}"]')
