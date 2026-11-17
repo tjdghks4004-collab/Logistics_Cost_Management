@@ -144,3 +144,6 @@ button{color:#525c68;background:#fff;border-color:#dfe4ea;border-radius:6px;font
 .brand .brand-copy small{display:none!important}
 /* Keep the breadcrumb bar on the same centered content grid as the page. */
 main>header{width:100%;max-width:1536px;margin-inline:auto;padding-inline:var(--page-gutter,28px)}
+/* Keep both global header bars on the same centered page grid. */
+body>aside{width:100%;height:auto;min-height:72px;padding-inline:max(24px,calc((100vw - 1536px)/2 + var(--page-gutter,28px)));box-sizing:border-box}main{padding-inline:var(--page-gutter,28px)}main>header{padding-inline:0}
+@media(max-width:1150px){body>aside{padding-inline:20px}}@media(max-width:760px){body>aside{padding-inline:14px}}
