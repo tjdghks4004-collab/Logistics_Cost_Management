@@ -1,14 +1,14 @@
 import {validateRecord,assertNoNewCostDuplicates,categoryParentOf,fingerprint} from './domain.mjs';
 import {resolveStoreSearch} from './quick-entry.mjs';
-export const centerChargeTypes={box:{label:'박스 출고비',quantity:'박스 수',unit:'BOX',mode:'calculated'},truck:{label:'용차비',quantity:'용차 횟수',unit:'건',mode:'amount'},processing:{label:'임가공비',quantity:'작업 수량',unit:'EA',mode:'calculated'}};
-export function centerChargeCategories(type,account,masters){return masters.filter(m=>m.active&&(type==='box'?m.name===(account==='공통'?'박스 출고비':account+' 출고비'):type==='truck'?m.name==='용차임':type==='processing'&&categoryParentOf(m.name,masters)==='임가공비')).map(m=>m.name);}
+export const centerChargeTypes={box:{label:'박스 출고비',quantity:'박스 수',unit:'BOX',mode:'calculated'},boxB2C:{label:'B2C 운반비',quantity:'박스 수',unit:'BOX',mode:'calculated',account:'B2C'},boxB2B:{label:'B2B 운반비',quantity:'박스 수',unit:'BOX',mode:'calculated',account:'B2B'},truck:{label:'용차비',quantity:'용차 횟수',unit:'건',mode:'amount'},processing:{label:'임가공비',quantity:'작업 수량',unit:'EA',mode:'calculated'}};
+export function centerChargeCategories(type,account,masters){const boxCategory={boxB2C:'B2C 운반비',boxB2B:'B2B 운반비'}[type];return masters.filter(m=>m.active&&(boxCategory?m.name===boxCategory:type==='box'?m.name===(account==='공통'?'박스 출고비':account+' 출고비'):type==='truck'?m.name==='용차임':type==='processing'&&categoryParentOf(m.name,masters)==='임가공비')).map(m=>m.name);}
 export function planCenterCharges(draft,context){
  const entries=[],errors=[];if(!centerChargeTypes[draft.type]||!['amount','calculated','reverse'].includes(draft.mode))return {entries,errors:['비용 유형·입력 방식을 확인하세요.']};
  if(!Array.isArray(draft.rows)||draft.rows.length>1000)return {entries,errors:['한 번에 최대 1,000행까지 입력하세요.']};
  const categories=centerChargeCategories(draft.type,draft.account,context.masters),category=draft.type==='processing'?draft.category:categories[0];
  if(!category||!categories.includes(category))return {entries,errors:['해당 유형의 사용 가능한 비용 항목을 기준정보에서 확인하세요.']};
  for(let i=0;i<draft.rows.length;i++){const r=draft.rows[i];if(!r||typeof r!=='object'){errors.push(`${i+1}행: 입력 형식을 확인하세요.`);continue;}if(!['quantity','price','amount','memo','storeQuery'].some(k=>String(r[k]??'').trim()))continue;
-  try{if(r.storeQuery)throw Error('매장 검색 결과를 선택하세요.');entries.push(validateRecord({month:draft.month,center:draft.center,account:draft.account,domain:'center',recordType:'cost',category,unit:draft.unit,mode:draft.mode,storeId:r.storeId||'',groupId:r.groupId||'',quantity:r.quantity,price:r.price,amount:r.amount,memo:r.memo||''},context));}catch(error){errors.push(`${i+1}행: ${error.message}`);}}
+  try{if(r.storeQuery)throw Error('매장 검색 결과를 선택하세요.');entries.push(validateRecord({month:draft.month,center:draft.center,account:centerChargeTypes[draft.type].account||draft.account,domain:'center',recordType:'cost',category,unit:centerChargeTypes[draft.type].account?'BOX':draft.unit,mode:draft.mode,storeId:r.storeId||'',groupId:r.groupId||'',quantity:r.quantity,price:r.price,amount:r.amount,memo:r.memo||''},context));}catch(error){errors.push(`${i+1}행: ${error.message}`);}}
  if(!entries.length&&!errors.length)errors.push('비용을 한 행 이상 입력하세요.');
  if(!errors.length)try{assertNoNewCostDuplicates([...(context.costs||[]),...entries],context.costs||[]);}catch(error){errors.push(error.message);}return {entries,errors};
 }

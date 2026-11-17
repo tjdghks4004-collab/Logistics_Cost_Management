@@ -3,13 +3,13 @@ import {categoryParentOf} from './domain.mjs';
 export function dashboardMonthStates(state,months){
  const locked=lockedMonths(state),checks=(state.reconciliations||[]).map(c=>({check:c,result:reconciliationResult(c,state)}));
  return months.map(month=>{const costs=state.costs.filter(r=>r.month===month&&r.recordType!=='count'),related=checks.filter(c=>c.check.months.includes(month)),covered=new Set(related.filter(c=>c.result.matched).flatMap(c=>c.check.recordIds)),coveredCount=costs.filter(r=>covered.has(r.id)).length,bad=related.some(c=>!c.result.matched),complete=costs.length>0&&coveredCount===costs.length&&!bad;
- return {month,status:locked.has(month)?'closed':bad?'review':complete?'reconciled':costs.length?'entering':'empty',costCount:costs.length,coveredCount,checkCount:related.length,hasCounts:state.costs.some(r=>r.month===month&&r.recordType==='count'),hasSales:(state.sales||[]).some(r=>r.month===month)||(state.activity||[]).some(r=>r.month===month)};});
+ return {month,status:locked.has(month)?'closed':bad?'review':complete?'reconciled':costs.length?'entering':'empty',costCount:costs.length,coveredCount,checkCount:related.length,hasCounts:state.costs.some(r=>r.month===month&&r.recordType==='count')||state.costs.some(r=>r.month===month&&r.domain==='center'&&r.recordType!=='count'&&/^(?:B2[CB] 운반비|B2[CB] 출고비|박스 출고비)$/.test(r.category)&&r.unit==='BOX'&&r.quantity!=null),hasSales:(state.sales||[]).some(r=>r.month===month)||(state.activity||[]).some(r=>r.month===month)};});
 }
 export function dashboardChargeMetrics(rows,masters){
  const groups=new Map(),costs=rows.filter(r=>r.domain==='center'&&r.recordType!=='count');
- for(const r of costs){const kind=r.category==='택배비'?'parcel':/^(?:B2[CB] 출고비|박스 출고비)$/.test(r.category)?'box':r.category==='용차임'?'truck':categoryParentOf(r.category,masters)==='임가공비'?'processing':null;if(!kind)continue;
+ for(const r of costs){const kind=r.category==='택배비'?'parcel':r.category==='B2C 운반비'?'boxB2C':r.category==='B2B 운반비'?'boxB2B':/^(?:B2[CB] 출고비|박스 출고비)$/.test(r.category)?'box':r.category==='용차임'?'truck':categoryParentOf(r.category,masters)==='임가공비'?'processing':null;if(!kind)continue;
  const rawUnit=String(r.unit||'원'),unit=kind==='box'&&['BOX','박스'].includes(rawUnit.toUpperCase())?'BOX':kind==='truck'&&['건','회'].includes(rawUnit)?'회':rawUnit;
- const label=kind==='parcel'?'택배비':kind==='box'?'박스 출고비':kind==='truck'?'용차비':r.category;
+ const label=kind==='parcel'?'택배비':kind==='boxB2C'?'B2C 운반비':kind==='boxB2B'?'B2B 운반비':kind==='box'?'박스 운반비':kind==='truck'?'용차비':r.category;
  // Total-only invoices have no measurable quantity, and never become a per-unit denominator.
  const measurable=r.quantity!=null&&Number.isFinite(Number(r.quantity))&&Number(r.quantity)>0&&unit!=='원';
  const key=JSON.stringify([kind,kind==='processing'?r.category:'',measurable?unit:'수량 없음']);if(!groups.has(key))groups.set(key,{key,kind,label,unit:measurable?unit:'수량 없음',amount:0,quantity:0,ids:[],measurable});const g=groups.get(key);g.amount+=r.amount;if(measurable)g.quantity+=Number(r.quantity);g.ids.push(r.id);
