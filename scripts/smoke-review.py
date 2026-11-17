@@ -19,13 +19,15 @@ def main():
     server=subprocess.Popen(['node','scripts/review-server.mjs'],cwd=ROOT,env={**os.environ,'REVIEW_PORT':'0'},stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True)
     try:
         port=None
+        server_output=""
         deadline=time.monotonic()+15
         while time.monotonic()<deadline:
             if server.poll() is not None:
                 raise RuntimeError('임시 검토 서버 시작 실패')
             readable,_,_=select.select([server.stdout],[],[],1)
             if readable:
-                match=re.search(r'포트 (\d+)',server.stdout.readline())
+                server_output+=os.read(server.stdout.fileno(),4096).decode()
+                match=re.search(r'포트 (\d+)',server_output)
                 if match:port=int(match.group(1));break
         if port is None:raise RuntimeError('임시 서버 준비 시간 초과')
         origin=f'http://127.0.0.1:{port}'
@@ -108,6 +110,7 @@ def main():
             assert page.locator('#dashboard-compare option[value="target"]').count()==0
             def choose(id,value):
                 box=page.locator(f'[data-multi="{"category" if id=="category-parent" else "store" if id=="group" else id}"]')
+                if box.locator('xpath=ancestor::details[@id="cost-advanced-filters"]').count():page.locator('#cost-advanced-filters').evaluate('e=>e.open=true')
                 if not box.evaluate('(el)=>el.open'):
                     page.locator('#title').click()
                     box.locator('summary').first.click()
@@ -164,7 +167,7 @@ def main():
             page.click('[data-view=costs]')
             assert page.locator('[data-edit]').count()==36
             page.click('[data-cost-tab=center]');assert page.locator('[data-edit]').count()==36
-            page.click('[data-cost-layout=rows]');page.click('[data-cost-columns=detailed]')
+            page.locator('#cost-table-settings').evaluate('e=>e.open=true');page.click('[data-cost-layout=rows]');page.locator('#cost-table-settings').evaluate('e=>e.open=true');page.click('[data-cost-columns=detailed]')
             center_columns=page.locator('#cost-records-table th').all_text_contents()
             assert '센터' in center_columns and '유형 / 업무' in center_columns and '수출입관리번호' not in center_columns
             assert page.locator('#cost-records-table tbody tr').first.locator('td').count()==len(center_columns)
@@ -300,7 +303,7 @@ def main():
             page.click('nav [data-view=costs]');page.click('[data-cost-tab=all]');page.wait_for_selector('[data-edit]')
             assert page.locator('tbody tr').count()==20
             page.click('[data-cost-tab=trade]');assert page.locator('[data-edit]').count()==2
-            page.click('[data-cost-columns=detailed]');assert page.locator('#cost-records-table tbody tr').first.locator('td').count()==len(trade_columns)
+            page.locator('#cost-table-settings').evaluate('e=>e.open=true');page.click('[data-cost-columns=detailed]');assert page.locator('#cost-records-table tbody tr').first.locator('td').count()==len(trade_columns)
             assert 'EXP-E2E-001' in page.locator('#cost-records-table').inner_text()
             page.click('[data-cost-tab=center]');assert page.locator('[data-edit]').count()==18
             page.click('[data-cost-tab=all]')
@@ -347,7 +350,7 @@ rows.forEach((row,i)=>sheet.getRow(i+2).values=headers.map(h=>row[h]??''));await
             # High-row-count lists stay bounded; searches and exports still cover the complete scope.
             page.set_viewport_size({'width':1440,'height':1050})
             page.evaluate("""()=>{const key='scm-logistics-review-v1',s=JSON.parse(localStorage.getItem(key)),base=s.costs.find(r=>r.domain==='center'&&r.recordType==='cost');s.costs=Array.from({length:2000},(_,i)=>({...base,id:'bulk-'+i,month:'2026-10',memo:'BULK-'+String(i).padStart(5,'0')}));s.costs[0].id='bulk-0\"><img src=x onerror=window.__costXss=1>';s.sales=[];s.activity=[];localStorage.setItem(key,JSON.stringify(s));}""")
-            page.reload();page.wait_for_selector('.kpi');page.click('[data-view=costs]');page.click('[data-cost-columns=detailed]')
+            page.reload();page.wait_for_selector('.kpi');page.click('[data-view=costs]');page.locator('#cost-table-settings').evaluate('e=>e.open=true');page.click('[data-cost-columns=detailed]')
             assert page.locator('#cost-records-table tbody tr').count()==100
             assert page.locator('#cost-count').inner_text()=='2000건'
             assert page.locator('#cost-list img').count()==0 and page.evaluate('window.__costXss===undefined')
