@@ -12,3 +12,5 @@ export async function loadWorkspace(seed){
  return {state:sample?seed():{costs:[],activity:[],notes:[],groups:[],stores:[],countries:[{code:'KR',name:'대한민국'}],centerMasters:[],masters:[{name:'포워딩',unit:'일괄',active:true},{name:'관세',unit:'일괄',active:true}]},initialize:true};
 }
 export async function persist(next){const result=await api('state',{method:'PUT',body:JSON.stringify({revision,state:next})});revision=result.revision;return result;}
+
+export async function bulkDeleteCosts(ids){const result=await api('costs/bulk-delete',{method:'POST',body:JSON.stringify({ids,revision})});revision=result.revision;return result;}
