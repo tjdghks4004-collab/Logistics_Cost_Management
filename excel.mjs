@@ -61,15 +61,15 @@ export async function buildUnifiedTemplate(ExcelJS,ctx){
  for(const [name,col,count] of definitions)wb.definedNames.add(`'기준정보'!$${col}$2:$${col}$${Math.max(2,count+1)}`,name);
  for(let n=2;n<=501;n++){
   for(const c of [1,4,8,9,11,22,23])sheet.getCell(n,c).numFmt='@';
-  sheet.getCell(n,27).numFmt='#,##0.####';sheet.getCell(n,28).numFmt='#,##0.######';sheet.getCell(n,30).numFmt='yyyy-mm-dd';
-  for(const [col,formula] of [[2,'"물류센터,수출입,공통"'],[3,'"비용,건수"'],[4,'UCountries'],[5,'UCenters'],[7,'"수출,수입"'],[8,'UCountries'],[9,'UCountries'],[10,'"B2C,B2B,공통"'],[11,'UStores'],[13,'UGroups'],[14,'UCats'],[15,'UUnits'],[20,'"'+incoterms.join(',')+'"'],[21,'"'+cargoTypes.join(',')+'"'],[24,'"'+chargeGroups.join(',')+'"'],[26,'"KRW,'+currencies.join(',')+'"'],[29,'"1,100,1000"'],[31,'"'+Object.keys(containerTypes).join(',')+'"']])sheet.getCell(n,col).dataValidation={type:'list',allowBlank:true,formulae:[formula],showErrorMessage:true,error:'기준정보의 값을 선택하세요.'};
+  sheet.getCell(n,27).numFmt='#,##0.####';sheet.getCell(n,28).numFmt='#,##0.######';sheet.getCell(n,30).numFmt='yyyy-mm-dd';for(const c of [33,34,35])sheet.getCell(n,c).numFmt='#,##0';
+  for(const [col,formula] of [[2,'"물류센터,수출입,공통"'],[3,'"비용,건수"'],[4,'UCountries'],[5,'UCenters'],[7,'"수출,수입"'],[8,'UCountries'],[9,'UCountries'],[10,'"B2C,B2B,공통"'],[11,'UStores'],[13,'UGroups'],[14,'UCats'],[15,'UUnits'],[20,'"'+incoterms.join(',')+'"'],[21,'"'+cargoTypes.join(',')+'"'],[24,'"'+chargeGroups.join(',')+'"'],[26,'"KRW,'+currencies.join(',')+'"'],[29,'"1,100,1000"'],[31,'"'+Object.keys(containerTypes).join(',')+'"'],[32,'"20FT,40FT"']])sheet.getCell(n,col).dataValidation={type:'list',allowBlank:true,formulae:[formula],showErrorMessage:true,error:'기준정보의 값을 선택하세요.'};
  }
  const ex=wb.addWorksheet('작성 예시');ex.columns=unifiedHeaders.map(header=>({header,width:23}));const country=ctx.countries[0].code,store=ctx.stores.find(s=>s.active),code=store?.code||'센터 공통',name=store?.name||'센터 공통';
  for(const [category,unit] of [['B2C 택배 발송 건수','건'],['B2C 출고 박스 수','BOX']])ex.addRow([ctx.month,'물류센터','건수',country,ctx.centers[0],'','','','','B2C',code,name,'',category,unit,'','',100,'서로 합산하지 않습니다']);
  ex.addRow([ctx.month,'물류센터','건수',country,ctx.centers[0],'','','','','B2C',code,name,'','B2C 출고 건수','건','','',100,'건수는 금액 합산 제외']);
  ex.addRow([ctx.month,'물류센터','비용',country,ctx.centers[0],'','','','','B2C',code,name,'','B2C 출고비','BOX',100,500,'','비용 50,000원']);
  ex.addRow([ctx.month,'수출입','비용',country,'','EXP-2026-001','수출',country,country,'공통','센터 공통','','','포워딩','일괄','','','','국가와 관리번호를 실제 값으로 변경','FCA','AIR','CIPL-2026-001','SCM-2026-001','국제운송료','계약상 지정 장소','USD',100,1350,1,'2026-10-01']);
- const containerExample=ex.getRow(4).values.slice(1);containerExample[5]='EXP-2026-002';containerExample[18]='해상 FCL 하이큐빅 예시';containerExample[19]='CIF';containerExample[20]='FCL';containerExample[21]='CIPL-2026-002';containerExample[22]='SCM-2026-002';containerExample[30]='HC';ex.addRow(containerExample);
+ const containerExample=ex.getRow(4).values.slice(1);containerExample[5]='EXP-2026-002';containerExample[18]='해상 FCL 하이큐빅 예시';containerExample[19]='CIF';containerExample[20]='FCL';containerExample[21]='CIPL-2026-002';containerExample[22]='SCM-2026-002';containerExample[30]='HC';containerExample[31]='40FT';containerExample[32]=1;containerExample[33]=40;containerExample[34]=400;ex.addRow(containerExample);
  for(const ws of [sheet,refs,ex]){ws.getRow(1).height=30;ws.getRow(1).eachCell(c=>{c.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FF1E3F70'}};c.font={bold:true,color:{argb:'FFFFFFFF'}};});}
  return wb;
 }

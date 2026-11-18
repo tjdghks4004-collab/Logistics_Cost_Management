@@ -42,6 +42,8 @@ function validateState(next,previous=null,restore=false){
    if((r.ciplNo||'')!==checked.ciplNo||(r.internalNo||'')!==checked.internalNo)throw Error('CIPL NO.와 내부 관리번호의 앞뒤 공백을 제거하세요.');
    if((r.chargeGroup||'')!==checked.chargeGroup||(r.namedPlace||'')!==checked.namedPlace)throw Error('비용 그룹 또는 지정 장소를 확인하세요.');
    if((r.containerType||'')!==checked.containerType)throw Error('컨테이너 타입을 확인하세요.');
+   if((r.containerSize??'')!==checked.containerSize)throw Error('컨테이너 크기를 확인하세요.');
+   for(const field of ['palletQuantity','boxQuantity','pieceQuantity']){if(r[field]!=null&&(!Number.isSafeInteger(r[field])||r[field]<0||r[field]>1e12))throw Error('포장 수량은 0 이상 1조 이하의 정수로 입력하세요.');if((r[field]??null)!==checked[field])throw Error('포장 수량을 확인하세요.');}
    if(r.calculation!==undefined&&(r.calculation!=='reverse'||r.recordType!=='cost'||(r.currency||'KRW')!=='KRW'||checked.price!==r.price||checked.quantity!==r.quantity))throw Error('역산 단가·수량·원화 입력 정보를 확인하세요.');
    if(r.recordType==='count'&&(checked.category!==r.category||checked.unit!==r.unit))throw Error('수량 기준과 항목·단위가 일치하지 않습니다.');
    if(checked.amount!==r.amount)throw Error('수량·단가 또는 외화·환율의 계산 결과와 금액이 일치하지 않습니다.');
