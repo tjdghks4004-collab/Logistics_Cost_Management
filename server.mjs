@@ -39,6 +39,7 @@ function validateState(next,previous=null,restore=false){
   try{
    const checked=validateRecord({...r,mode:r.calculation==='reverse'?'reverse':r.currency&&r.currency!=='KRW'?'fx':r.quantity==null||r.price==null?'amount':'calculated'},ctx,{previous:restore?r:old.get(r.id)});
    if((r.incoterm||'')!==checked.incoterm||(r.cargoType||'')!==checked.cargoType)throw Error('수출입 부가정보는 지원되는 대문자 코드로 입력하세요.');
+   if((r.shipmentDate||'')!==checked.shipmentDate)throw Error('선적일을 YYYY-MM-DD 형식으로 확인하세요.');
    if((r.ciplNo||'')!==checked.ciplNo||(r.internalNo||'')!==checked.internalNo)throw Error('CIPL NO.와 내부 관리번호의 앞뒤 공백을 제거하세요.');
    if((r.chargeGroup||'')!==checked.chargeGroup||(r.namedPlace||'')!==checked.namedPlace)throw Error('비용 그룹 또는 지정 장소를 확인하세요.');
    if((r.containerType||'')!==checked.containerType)throw Error('컨테이너 타입을 확인하세요.');
